@@ -1,52 +1,61 @@
 %% This script is used to read library information for all sequences with all QPs and delta QPs.
-flagReadSeqListCTC = 0;
+flagReadSeqListTest = 0;
 flagReadSeqListTrain = 0;
 flagReadLibInfo = 0;
 flagReadLogFile = 0;
-flagPrepareContentInfo = 1;
-flagFitForBestDqpEachLib = 0;
-flagFitForBestDqpWholeSeq = 0;
+flagPrepareContentInfo = 0;
+flagFitForBestDqpEachLib = 1;
+flagCheckResultValidity = 0;
 
+% prepare basic information.
 listQP = 22:5:37;
 listDqp = 2:-1:-11;
 numQP = length(listQP);
 numDqp = length(listDqp);
 
 %% read sequences list file of CTC.
-if flagReadSeqListCTC
+if flagReadSeqListTest
+	% display information.
+	disp('reading sequence list of CTC.\n');
+
     rcVecSeqsB = readSeqList('.\\SeqList_B.txt');
     rcVecSeqsC = readSeqList('.\\SeqList_C.txt');
     rcVecSeqsD = readSeqList('.\\SeqList_D.txt');
     numVecSeqsB = size(rcVecSeqsB, 1);
     numVecSeqsC = size(rcVecSeqsC, 1);
     numVecSeqsD = size(rcVecSeqsD, 1);
-    classSeqB = cellstr(char(ones(numVecSeqsB, 1) * 'B'));
-    classSeqC = cellstr(char(ones(numVecSeqsC, 1) * 'C'));
-    classSeqD = cellstr(char(ones(numVecSeqsD, 1) * 'D'));
 
     % collect data.
-    cellListSeq = [classSeqB rcVecSeqsB; classSeqC rcVecSeqsC ; classSeqD rcVecSeqsD];
-    numAllSeq = numVecSeqsB + numVecSeqsC + numVecSeqsD;
+    cellListSeq_Test = [rcVecSeqsB; rcVecSeqsC ; rcVecSeqsD];
+    numAllSeq_Test = numVecSeqsB + numVecSeqsC + numVecSeqsD;
 
     % set path.
-    path = '.\log\';
-    pathYuv = '\\mcl\MCL_Space\TestSeq\FinalCfPVersionSequence\';
+    path = '.\log-ctc\';
+    pathYuv = '\\mcl\MCL_Space\TestSeq\';
+    cellListSeq = cellListSeq_Test;
+    numAllSeq = numAllSeq_Test;
     
     % clear temp data.
-    clear rcVecSeqsB rcVecSeqsC rcVecSeqsD numVecSeqsB numVecSeqsC numVecSeqsD classSeqB classSeqC classSeqD;
+    clear rcVecSeqsB rcVecSeqsC rcVecSeqsD numVecSeqsB numVecSeqsC numVecSeqsD;
 end
-%% read sequences list file of AVS.
+
+%% read sequences list file of train sequences.
 if flagReadSeqListTrain
+    % display information.
+	disp('reading train sequence list.\n');
+
     rcVecSeqs = readSeqList('.\\SeqList-train-all.txt');
     numVecSeqs = size(rcVecSeqs, 1);
 
     % collect data.
-    cellListSeq = rcVecSeqs;
-    numAllSeq = numVecSeqs;
+    cellListSeq_Train = rcVecSeqs;
+    numAllSeq_Train = numVecSeqs;
     
     % set path.
     path = '.\log-train\';
     pathYuv = '\\mcl\MCL_Space\TestSeq\';
+    cellListSeq = cellListSeq_Train;
+    numAllSeq = numAllSeq_Train;
 
     % clear temp data.
     clear rcVecSeqs numVecSeqs;
@@ -54,6 +63,9 @@ end
 
 %% read library information file.
 if flagReadLibInfo
+	% display information.
+	disp('reading library information of sequences.\n');
+	% collect data.
 	cellLibInfo = cell(numAllSeq, 7);
 	for idxSeq = 1: numAllSeq
 		% for one sequence, libInfo is same for all qp and dqp, except the area of inter prediction.
@@ -75,29 +87,37 @@ if flagReadLibInfo
 		cellLibInfo(idxSeq, 6) = {listRefLib};
 	end % seq
 
+	% collect data for train or test.
+	if flagReadSeqListTrain
+		cellLibInfo_Train = cellLibInfo;
+	elseif flagReadSeqListTest
+		cellLibInfo_Test = cellLibInfo;
+	end
+
 	% clear temp data.
 	clear dqp qp strDqp strQP fileLibInfo libInfo listSCD listOrgLib listIntraPic listRefLib listLibFreq listCenterCost listClusterCost;
 end
 
+%% read log file.
 if flagReadLogFile
 	subFlagReadSeqLog = 0;
 	subFlagReadKeyLog = 0;
 	subFlagReadBitPsnrEachLib = 1;
+	subFlagReadRDcostEachLib = 1;
 
 	%% read sequence encoding log file for bitrate and psnr.
 	if subFlagReadSeqLog
 		gainYUVAllSeq = zeros(numAllSeq, numDqp);
-	    bitPsnrALLSeqAnchor = cell(numAllSeq, 1);
 		for idxSeq = 1: numAllSeq
 			% read anchor.
 			bitPsnrAnchor = zeros(4, 5);
 			for idxQP = 1: numQP
 				strQP = num2str(listQP(idxQP));
-				fileAnchor = [path cellListSeq{idxSeq, 2} '\seq\Sequence_' strQP '_anchor_enc.txt'];
+				fileAnchor = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_anchor_gop16_enc.txt'];
 				bitPsnrAnchor(idxQP, :) = readSumBitPsnr(fileAnchor);
 			end
-			bitPsnrALLSeqAnchor(idxSeq) = {bitPsnrAnchor};
 
+			% read libvc.
 			for idxDqp = 1: numDqp
 				if(listDqp(idxDqp) <= 0)
 					strDqp = num2str(-listDqp(idxDqp));
@@ -107,13 +127,21 @@ if flagReadLogFile
 				bitPsnrLib = zeros(4, 5);
 				for idxQP = 1: numQP
 					strQP = num2str(listQP(idxQP));
-					fileLib = [path cellListSeq{idxSeq, 2} '\seq\Sequence_fixQP_' strDqp '_' strQP '_libvc_enc.txt'];
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
 					bitPsnrLib(idxQP, :) = readSumBitPsnr(fileLib);
 				end
 				gain = bdRateComparation( bitPsnrAnchor, bitPsnrLib );
 				gainYUVAllSeq(idxSeq, idxDqp) = gain(4);
 			end
 		end
+
+		% collect data for train or test.
+		if flagReadSeqListTrain
+			gainYUVAllSeq_Train = gainYUVAllSeq;
+		elseif flagReadSeqListTest
+			gainYUVAllSeq_Test = gainYUVAllSeq;
+		end
+
 		% clear temp data.
 		clear bitPsnrAnchor strQP fileAnchor strDqp bitPsnrLib fileLib gain;
 	end
@@ -126,7 +154,7 @@ if flagReadLogFile
 			bitPsnrAnchor = zeros(4, 5);
 			for idxQP = 1: numQP
 				strQP = num2str(listQP(idxQP));
-				fileAnchor = [path cellListSeq{idxSeq, 2} '\seq\Sequence_' strQP '_anchor_enc.txt'];
+				fileAnchor = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_anchor_gop16_enc.txt'];
 				bitPsnrAnchor(idxQP, :) = readKeyFrameSumBitPsnr(fileAnchor);
 			end
 
@@ -139,71 +167,233 @@ if flagReadLogFile
 				bitPsnrLib = zeros(4, 5);
 				for idxQP = 1: numQP
 					strQP = num2str(listQP(idxQP));
-					fileLib = [path cellListSeq{idxSeq, 2} '\seq\Sequence_fixQP_' strDqp '_' strQP '_libvc_enc.txt'];
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
 					bitPsnrLib(idxQP, :) = readKeyFrameSumBitPsnr(fileLib);
 				end
 				gain = bdRateComparation( bitPsnrAnchor, bitPsnrLib );
 				gainKeyYUVAllSeq(idxSeq, idxDqp) = gain(4);
 			end
 		end
+
+		% collect data for train or test.
+		if flagReadSeqListTrain
+			gainKeyYUVAllSeq_Train = gainKeyYUVAllSeq;
+		elseif flagReadSeqListTest
+			gainKeyYUVAllSeq_Test = gainKeyYUVAllSeq;
+		end
+
 		% clear temp data.
 		clear bitPsnrAnchor strQP fileAnchor strDqp bitPsnrLib fileLib gain;
 	end
 
 	%% read average bitrate and psnr of frames for each library picture.
 	if subFlagReadBitPsnrEachLib
+		% display information.
+		disp('reading bitrate and PSNR for each cluster of one library picture.\n');
+		% collect data.
 		gainYEachLibAllSeq = cell(numAllSeq, numDqp);
-	    bitPsnrEachLibALLSeqLibvc = cell(numAllSeq, numDqp);
+		gainYEachLibAllSeqKeyFrames = cell(numAllSeq, numDqp);
 	    numFrameEachLibAllSeq = cell(numAllSeq, 1);
 		for idxSeq = 1: numAllSeq
-	        frameRate = cellListSeq{idxSeq, 4} / 10;
-			% for one sequence, libInfo is same for all qp and dqp, except the area of inter prediction.
-	    	dqp = 0; qp = 22;
-	    	strDqp = num2str(dqp);
-	    	strQP = num2str(qp);
-	    	fileLibInfo = [path cellListSeq{idxSeq, 2} '\lib\libraryInfo_fixQP_' strDqp '_' strQP '_libvc.txt'];
-	    	numLibPic = length(cellLibInfo{idxSeq, 5});
+	        frameRate = cellListSeq{idxSeq, 3};
+	    	% prepare data.
+			listIntraPic = cellLibInfo{idxSeq, 4};
+			listOrgLib = cellLibInfo{idxSeq, 5};
+			listRefLib = cellLibInfo{idxSeq, 6};
+	    	numLibPic = length(listOrgLib);
 			% read anchor.
+			% collect data.
 			bitPsnrAnchorAllLib = zeros(4* numLibPic, 5);
+			bitPsnrAnchorAllLibKeyFrames = zeros(4* numLibPic, 4);
 			for idxQP = 1: numQP
 				strQP = num2str(listQP(idxQP));
-				fileAnchor = [path cellListSeq{idxSeq, 2} '\seq\Sequence_' strQP '_anchor_enc.txt'];
-				[bitPsnrAnchor, listLibPoc, listNumFrames] = readBitPsnrSingleLib(fileAnchor, fileLibInfo, frameRate, 0);
+				fileAnchor = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_anchor_gop16_enc.txt'];
+				[bitPsnrAnchor, bitPsnrAnchorKeyFrames, ~, ~, listNumFrames] = readBitPsnrSingleLib(fileAnchor, listOrgLib, listIntraPic, listRefLib, frameRate, 0);
 				bitPsnrAnchorAllLib(idxQP: 4: end, :) = bitPsnrAnchor;
-	            numFrameEachLibAllSeq(idxSeq) = {listNumFrames};
+				bitPsnrAnchorAllLibKeyFrames(idxQP: 4: end, :) = bitPsnrAnchorKeyFrames;
 			end
 			numFrameEachLibAllSeq(idxSeq) = {listNumFrames};
 
 			for idxDqp = 1: numDqp
+				% prepare path.
 				if(listDqp(idxDqp) <= 0)
 					strDqp = num2str(-listDqp(idxDqp));
 				else
 					strDqp = ['0' num2str(listDqp(idxDqp))];
 				end
+				% collect data.
 				bitPsnrLibAllLib = zeros(4* numLibPic, 5);
+				bitPsnrLibAllLibKeyFrames = zeros(4* numLibPic, 4);
 				for idxQP = 1: numQP
 					strQP = num2str(listQP(idxQP));
-					fileLib = [path cellListSeq{idxSeq, 2} '\seq\Sequence_fixQP_' strDqp '_' strQP '_libvc_enc.txt'];
-					[bitPsnrLib, listLibPoc, listNumFrames] = readBitPsnrSingleLib(fileLib, fileLibInfo, frameRate, 1);
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
+					[bitPsnrLib, bitPsnrLibKeyFrames, ~, ~, listNumFrames] = readBitPsnrSingleLib(fileLib, listOrgLib, listIntraPic, listRefLib, frameRate, 1);
 					bitPsnrLibAllLib(idxQP: 4: end, :) = bitPsnrLib;
+					bitPsnrLibAllLibKeyFrames(idxQP: 4: end, :) = bitPsnrLibKeyFrames;
 				end
-				bitPsnrEachLibALLSeqLibvc(idxSeq, idxDqp) = {bitPsnrLibAllLib};
 
 				% compute BD-rate for each group of library picture.
 				gain = zeros(numLibPic, 4);
+				gainKeyFrames = zeros(numLibPic, 3);
 				for idxLibPic = 1: numLibPic
+					% BD-rate for all frames.
 					bitPsnrAnchor = bitPsnrAnchorAllLib(((idxLibPic - 1) * 4 + 1): (idxLibPic * 4), :);
 					bitPsnrLib = bitPsnrLibAllLib(((idxLibPic - 1) * 4 + 1): (idxLibPic * 4), :);
 					gain(idxLibPic, :) = bdRateComparation( bitPsnrAnchor, bitPsnrLib );
+					% BD-rate for key frames.
+					bitPsnrAnchorKeyFrames = bitPsnrAnchorAllLibKeyFrames(((idxLibPic - 1) * 4 + 1): (idxLibPic * 4), :);
+					bitPsnrLibKeyFrames = bitPsnrLibAllLibKeyFrames(((idxLibPic - 1) * 4 + 1): (idxLibPic * 4), :);
+					gainKeyFrames(idxLibPic, :) = bdRateComparation( bitPsnrAnchorKeyFrames, bitPsnrLibKeyFrames );
 				end
 				gainYEachLibAllSeq(idxSeq, idxDqp) = {gain(:, 1)};
+				gainYEachLibAllSeqKeyFrames(idxSeq, idxDqp) = {gainKeyFrames(:, 1)};
 			end
 		end
+
+		% collect data for train or test.
+		if flagReadSeqListTrain
+			gainYEachLibAllSeq_Train = gainYEachLibAllSeq;
+			gainYEachLibAllSeqKeyFrames_Train = gainYEachLibAllSeqKeyFrames;
+			numFrameEachLibAllSeq_Train = numFrameEachLibAllSeq;
+		elseif flagReadSeqListTest
+			gainYEachLibAllSeq_Test = gainYEachLibAllSeq;
+			gainYEachLibAllSeqKeyFrames_Test = gainYEachLibAllSeqKeyFrames;
+			numFrameEachLibAllSeq_Test = numFrameEachLibAllSeq;
+		end
+
 		% clear temp data.
-		clear frameRate dqp qp strDqp strQP fileLibInfo numLibPic bitPsnrAnchorAllLib;
+		clear frameRate dqp qp strDqp strQP fileLibInfo numLibPic strDqp fileLib;
 		clear strQP fileAnchor listLibPoc listNumFrames;
-		clear strDqp bitPsnrLibAllLib fileLib;
-		clear gain bitPsnrAnchor bitPsnrLib;
+		clear gain bitPsnrAnchor bitPsnrLib bitPsnrAnchorKeyFrames bitPsnrLibKeyFrames;
+		clear bitPsnrAnchorAllLib bitPsnrLibAllLib bitPsnrAnchorAllLibKeyFrames bitPsnrLibAllLibKeyFrames;
+	end
+
+	%% read RDcost for each cluster containning single library picture.
+	if subFlagReadRDcostEachLib
+		% display information.
+		disp('reading RDcost for each cluster of one library picture.\n');
+
+		% prepare basic information.
+		lambdaFactor = 0.57;
+
+		% collect data for each sequence, each library picture, each base qp, each dqp.
+		cellRDcostAllSeq = cell(numAllSeq, 3); % 1 for anchor , 2 for libvc, 3 for numframes of each library picture.
+		cellRDcostAllSeqKeyFrames = cell(numAllSeq, 3);
+
+		% compute RDcost.
+		for idxSeq = 1: numAllSeq
+			% prepare data.
+			listLibFreq = cellLibInfo{idxSeq, 3};
+			listIntraPic = cellLibInfo{idxSeq, 4};
+			listOrgLib = cellLibInfo{idxSeq, 5};
+			listRefLib = cellLibInfo{idxSeq, 6};
+
+			numLibPic = length(listOrgLib);
+			widthSeq = cellListSeq{idxSeq, 5};
+			heightSeq = cellListSeq{idxSeq, 6};
+
+			frameRate = cellListSeq{idxSeq, 3};
+
+			% read anchor.
+			% collect data.
+			cellRDcostAnchorAllLib = cell(numLibPic, numQP);
+			cellRDcostAnchorAllLibKeyFrames = cell(numLibPic, numQP);
+
+			for idxQP = 1: numQP
+				% collect data.
+				strQP = num2str(listQP(idxQP));
+				fileAnchor = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_anchor_gop16_enc.txt'];
+				[bitPsnrAnchor, bitPsnrAnchorKeyFrames, sseAnchor, sseAnchorKeyFrames, listNumFrames] = readBitPsnrSingleLib(fileAnchor, listOrgLib, listIntraPic, listRefLib, frameRate, 0);
+
+				% RDcost.
+				lambda = lambdaFactor * 2 ^ ((listQP(idxQP) - 12) / 3);
+				for idxLibPic = 1: numLibPic
+					% for all frames.
+					sseY = widthSeq * heightSeq * sseAnchor(idxLibPic, 1);
+					bits = bitPsnrAnchor(idxLibPic, 1) / frameRate * listNumFrames(idxLibPic) * 1000;
+					cellRDcostAnchorAllLib(idxLibPic, idxQP) = {sseY + lambda * bits};
+					% for key frames.
+					sseY = widthSeq * heightSeq * sseAnchorKeyFrames(idxLibPic, 1);
+					bits = bitPsnrAnchorKeyFrames(idxLibPic, 1) / frameRate * listLibFreq(idxLibPic) * 1000;
+					cellRDcostAnchorAllLibKeyFrames(idxLibPic, idxQP) = {sseY + lambda * bits};
+				end
+			end
+
+			% read libvc.
+			% collect data.
+			cellRDcostLibvcAllLib = cell(numLibPic, numQP);
+			cellRDcostLibvcAllLibKeyFrames = cell(numLibPic, numQP);
+
+			% for each qp.
+			for idxQP = 1: numQP
+				% prepare log path.
+				strQP = num2str(listQP(idxQP));
+
+				% for each dqp.
+				% collect data.
+				matRDcostALLDqp = zeros(numDqp, numLibPic);
+				matRDcostALLDqpKeyFrames = zeros(numDqp, numLibPic);
+			
+				for idxDqp = 1: numDqp
+					% prepare log path.
+					if(listDqp(idxDqp) <= 0)
+						strDqp = num2str(-listDqp(idxDqp));
+					else
+						strDqp = ['0' num2str(listDqp(idxDqp))];
+					end
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
+
+					% read libvc log file.
+					[bitPsnrLib, bitPsnrLibKeyFrames, sseLib, sseLibKeyFrames, listNumFrames] = readBitPsnrSingleLib(fileLib, listOrgLib, listIntraPic, listRefLib, frameRate, 1);
+
+					% RDcost.
+					lambda = lambdaFactor * 2 ^ ((listQP(idxQP) - 12) / 3);
+					for idxLibPic = 1: numLibPic
+						% for all frames.
+						sseY = widthSeq * heightSeq * sseLib(idxLibPic, 1);
+						bits = bitPsnrLib(idxLibPic, 1) / frameRate * listNumFrames(idxLibPic) * 1000;
+						matRDcostALLDqp(idxDqp, idxLibPic) = sseY + lambda * bits;
+						% for key frames.
+						sseY = widthSeq * heightSeq * sseLibKeyFrames(idxLibPic, 1);
+						bits = bitPsnrLibKeyFrames(idxLibPic, 1) / frameRate * listLibFreq(idxLibPic) * 1000;
+						matRDcostALLDqpKeyFrames(idxDqp, idxLibPic) = sseY + lambda * bits;
+					end
+				end
+				% collect data.
+				for idxLibPic = 1: numLibPic
+					cellRDcostLibvcAllLib(idxLibPic, idxQP) = {matRDcostALLDqp(:, idxLibPic)};
+					cellRDcostLibvcAllLibKeyFrames(idxLibPic, idxQP) = {matRDcostALLDqpKeyFrames(:, idxLibPic)};
+				end
+			end
+			% collect data.
+			cellRDcostAllSeq(idxSeq, 1) = {cellRDcostAnchorAllLib};
+			cellRDcostAllSeq(idxSeq, 2) = {cellRDcostLibvcAllLib};
+			cellRDcostAllSeq(idxSeq, 3) = {listNumFrames};
+
+			cellRDcostAllSeqKeyFrames(idxSeq, 1) = {cellRDcostLibvcAllLibKeyFrames};
+			cellRDcostAllSeqKeyFrames(idxSeq, 2) = {cellRDcostLibvcAllLibKeyFrames};
+			cellRDcostAllSeqKeyFrames(idxSeq, 3) = {listNumFrames};
+		end
+
+		% collect data for train or test.
+		if flagReadSeqListTrain
+			cellRDcostAllSeq_Train = cellRDcostAllSeq;
+			cellRDcostAllSeqKeyFrames_Train = cellRDcostAllSeqKeyFrames;
+		elseif flagReadSeqListTest
+			cellRDcostAllSeq_Test = cellRDcostAllSeq;
+			cellRDcostAllSeqKeyFrames_Test = cellRDcostAllSeqKeyFrames;
+		end
+
+		% clear temp data.
+		clear listIntraPic listOrgLib listRefLib numLibPic widthSeq heightSeq;
+		clear cellRDcostAnchorAllLib cellRDcostLibvcAllLib matRDcostALLDqp;
+		clear cellRDcostAnchorAllLibKeyFrames cellRDcostLibvcAllLibKeyFrames matRDcostALLDqpKeyFrames;
+		clear idxQP idxDqp idxLibPic;
+		clear strQP strDqp;
+		clear fileAnchor fileLib;
+		clear bitPsnrAnchor bitPsnrLib bitPsnrAnchorKeyFrames bitPsnrLibKeyFrames;
+		clear listLibPoc listNumFrames;
+		clear lambda psnrY sseY bits;
 	end
 end
 
@@ -213,7 +403,9 @@ if flagPrepareContentInfo
 
     %% read sequence yuv to compute content information of picutures.
 	if subFlagComputeContentInfo
-		
+		% display information.
+		disp('computing content information from sequences.\n');
+
 		oriContentInfoAllSeq = cell(numAllSeq, 3);
         blockSize = 16;
         searchRange = 64;
@@ -227,6 +419,7 @@ if flagPrepareContentInfo
 			fileYuv = [pathYuv cellListSeq{idxSeq, 1} '\' cellListSeq{idxSeq, 2} '.yuv'];
             disp(fileYuv);
 
+            % \''collect data.
 			stdAllIntraPic = zeros(numIntraPic, 1);
 			stdBlockAllIntraPic = zeros(numIntraPic, 1);
 			distAllIntraPic = zeros(numIntraPic, 1);
@@ -272,7 +465,6 @@ if flagPrepareContentInfo
                         storeErr(idxIntraPic) = {errMatIntra};
                     end
                 end
-                
             end
             toc
 
@@ -282,6 +474,14 @@ if flagPrepareContentInfo
             	oriContentInfoAllSeq(idxSeq, 3) = {storeErr};
             end
 		end
+
+		% collect data for train or test.
+		if flagReadSeqListTrain
+			oriContentInfoAllSeq_Train = oriContentInfoAllSeq;
+		elseif flagReadSeqListTest
+			oriContentInfoAllSeq_Test = oriContentInfoAllSeq;
+		end
+
 		% clear temp data.
 		clear listLibFreq listIntraPic listOrgLib listRefLib numIntraPic numLibPic fileYuv;
 		clear stdAllIntraPic stdBlockAllIntraPic distAllIntraPic distMCAllIntraPic storeMv storeErr;
@@ -291,9 +491,200 @@ if flagPrepareContentInfo
 end
 
 if flagFitForBestDqpEachLib
+	subFlagPrepareSampleBestDqpForRDcostEachLib = 1;
 	subFlagProcessGainForBestDQPEachLib = 0;
-	subFlagProcessContentInfoEachLib = 1;
+	subFlagProcessContentInfoEachLib = 0;
     subFlagPrepareFitData = 0;
+
+    %% prepare the sample based on RDcost for each library picture.
+    if subFlagPrepareSampleBestDqpForRDcostEachLib
+    	subsubFlagPrepareSample = 0;
+    	subsubFlagTrainFunction = 1;
+
+    	% display information.
+		disp('fitting samples.\n');
+
+		if subsubFlagPrepareSample
+	    	% collect data.
+	    	matSampleAllSeqAllLibAllQp = [];
+	    	sample = zeros(1, 6); % SSEi/similarity/numIntra/qstep_key/Dqp_allFrames/qstep_allFrames/Dqp_keyFrames/qstep_keyFrames.
+
+	    	for idxSeq = 1: numAllSeq
+	    		% prepare library information.
+	    		listLibFreq = cellLibInfo{idxSeq, 3};
+	    		listIntraPic = cellLibInfo{idxSeq, 4};
+	    		listRefLib = cellLibInfo{idxSeq, 6};
+	    		listOrgLib = cellLibInfo{idxSeq, 5};
+	    		numLibPic = length(listOrgLib);
+	    		numIntraPic = length(listIntraPic);
+	    		% prepare content information.
+	    		listSimPercentageAllIntraPic = oriContentInfoAllSeq{idxSeq}(:, 8);
+	    		listSelfIntraAllIntraPic = oriContentInfoAllSeq{idxSeq}(:, 10); % use the frame-level SSE instead of pixel-level MSE.
+	    		widthSeq = cellListSeq{idxSeq, 5};
+				heightSeq = cellListSeq{idxSeq, 6};
+
+	    		for idxLibPic = 1: numLibPic
+	    			% prepare content information for samples.
+	    			posLibPicInIntraList = find(listIntraPic == listOrgLib(idxLibPic));
+	    			if isempty(posLibPicInIntraList)
+	    				error('error in find the library picture in key picture list\n');
+	    			end
+	    			sample(1) = listSelfIntraAllIntraPic(posLibPicInIntraList) / widthSeq / heightSeq;
+
+	    			% prepare similarity for each intra picture, find the corresponding library picture and create similarity.
+	    			% collect data.
+	    			sumSimPercentage = 0;
+	    			for idxIntraPic = 1: numIntraPic
+	    				% find the corresponding library picture.
+	    				if listRefLib(idxIntraPic) ~= (idxLibPic - 1)
+	    					continue;
+	    				end
+	    				% summary the similarity.
+	    				sumSimPercentage = sumSimPercentage + listSimPercentageAllIntraPic(idxIntraPic);
+	    			end
+	    			% since the similarity for the key picture who is library picture is not computed, add the sumsim by 1.
+	    			sample(2) = sumSimPercentage + 1;
+
+	    			% prepare number of key pictures for each library picture.
+	    			% NOTE!!!!!!!!!!!!!!!--this number should be the total number of pictures that are considered in the RDcost function.
+	    			% !!!!!!!!!!!!!!!!!!!--But here we use only the number of key frames.
+	    			sample(3) = listLibFreq(idxLibPic);
+
+	    			% prepare QP and best DQP.
+	    			for idxQP = 1: numQP
+	    				% prepare data.
+	    				matRDcostALLDqp = cellRDcostAllSeq{idxSeq, 2}{idxLibPic, idxQP};
+	    				matRDcostALLDqpKeyFrames = cellRDcostAllSeqKeyFrames{idxSeq, 2}{idxLibPic, idxQP};
+
+	    				% prepare base q-step for sample.
+	    				sample(4) = 2 ^ ((listQP(idxQP) - 4) / 6);
+
+	    				% prepare best DQP for sample.
+	    				% all frames.
+	    				[~, idxBestDqp] = min(matRDcostALLDqp);
+	    				sample(6) = 2 ^ (listDqp(idxBestDqp) / 6); % use q-step instead of DQP.
+	                    sample(5) = listDqp(idxBestDqp);
+	                    % key frames.
+	                    [~, idxBestDqpKeyFrames] = min(matRDcostALLDqpKeyFrames);
+	    				sample(8) = 2 ^ (listDqp(idxBestDqpKeyFrames) / 6); % use q-step instead of DQP.
+	                    sample(7) = listDqp(idxBestDqpKeyFrames);
+
+	    				% collect sample.
+	    				matSampleAllSeqAllLibAllQp = [matSampleAllSeqAllLibAllQp; sample];
+	    			end
+	    		end
+	    	end
+
+	    	% collect data for train or test.
+	    	if flagReadSeqListTrain
+	    		matSampleAllSeqAllLibAllQp_Train = matSampleAllSeqAllLibAllQp;
+	    	elseif flagReadSeqListTest
+	    		matSampleAllSeqAllLibAllQp_Test = matSampleAllSeqAllLibAllQp;
+	    	end
+
+	    	clear sample;
+	    	clear idxSeq idxLibPic idxBestDqp idxBestDqpKeyFrames;
+	    	clear listIntraPic listRefLib listOrgLib numLibPic numIntraPic;
+	    	clear listSelfIntraAllIntraPic listSimPercentageAllIntraPic;
+	    	clear posLibPicInIntraList sumSimPercentage matRDcostALLDqp matRDcostALLDqpKeyFrames;
+	    end
+
+    	%% train the derivation of RDcost function based on the sample.
+    	if subsubFlagTrainFunction
+    		subsubsubFlagLinearRegress = 1;
+    		subsubsubFlagNonLinearRegress = 0;
+
+    		% combine multipal input and fit data using linear regress.
+    		if subsubsubFlagLinearRegress
+                subsubsubsubFlagTestFunction = 1;
+                
+    			% prepare basic data. SSEi/similarity/numIntra/qstep_key/Dqp_allFrames/qstep_allFrames/Dqp_keyFrames/qstep_keyFrames.
+    			sseY = matSampleAllSeqAllLibAllQp_Train(:, 1);
+    			sim = matSampleAllSeqAllLibAllQp_Train(:, 2);
+    			nIntra = matSampleAllSeqAllLibAllQp_Train(:, 3);
+    			qKey = matSampleAllSeqAllLibAllQp_Train(:, 4);
+    			%dq = matSampleAllSeqAllLibAllQp_Train(:, 8);
+                dq = bestDqpAllSeqAllLibPicAllQp_BDrate_Train;
+
+    			% prepare input data. equation ----- a1*qk^3*n*s*dq^4+a2*qk^2*n*s*dq^4+a3*qk^3*dq^3+a4*qk*sse*dq=sse;
+    			% first item.
+    			inData_1 = qKey.^3.*nIntra.*sim.*dq.^4;
+    			inData_2 = qKey.^2.*nIntra.*sim.*dq.^4;
+    			inData_3 = qKey.^3.*dq.^3;
+    			inData_4 = qKey.*sseY.*dq;
+                inData_5 = ones(length(inData_1), 1);
+    			outData = sseY;
+
+    			% linear regress.
+    			[aCoeff, ~, ~, ~, stats_Train] = regress(outData, [inData_1 inData_2 inData_3 inData_4 inData_5]);
+    			aCoeff
+    			stats_Train(1)
+
+    			if subsubsubsubFlagTestFunction
+    				
+    				% prepare input data.
+                    matSample = matSampleAllSeqAllLibAllQp_Train;
+    				dq_FitBest = zeros(size(matSample, 1), 1) - 100;
+                    valMin = Inf(size(matSample, 1), 1);
+    				for idxSample = 1: length(dq_FitBest)
+    					% prepare basic data.
+	    				sseY_Test = matSample(idxSample, 1);
+	    				sim_Test = matSample(idxSample, 2);
+	    				nIntra_Test = matSample(idxSample, 3);
+	    				qKey_Test = matSample(idxSample, 4);
+	    				% check for the best.
+    					for idxDqp = 1: numDqp
+    						dq_FitTmp = 2 ^ (listDqp(idxDqp) / 6);
+    						% prepare data.
+    						inData_1 = qKey_Test.^3.*nIntra_Test.*sim_Test.*dq_FitTmp.^4;
+			    			inData_2 = qKey_Test.^2.*nIntra_Test.*sim_Test.*dq_FitTmp.^4;
+			    			inData_3 = qKey_Test.^3.*dq_FitTmp.^3;
+			    			inData_4 = qKey_Test.*sseY_Test.*dq_FitTmp;
+                            inData_5 = ones(length(inData_1), 1);
+			    			outData = sseY_Test;
+
+    						valTmp = aCoeff(1)*inData_1 ...
+    								+ aCoeff(2)*inData_2 ...
+    								+ aCoeff(3)*inData_3 ...
+    								+ aCoeff(4)*inData_4 ...
+                                    + aCoeff(5)*inData_5 ...
+    								- outData;
+    						if abs(valTmp) < valMin(idxSample)
+    							dq_FitBest(idxSample) = listDqp(idxDqp);
+    							valMin(idxSample) = abs(valTmp);
+    						end
+    					end
+    				end
+    				% clear temp data.
+    				clear idxSample idxDqp;
+    				clear valTmp;
+    				clear sseY_Test sim_Test nIntra_Test qKey_Test;
+    				clear dq_FitTmp;
+    			end
+
+    			clear sseY sim nIntra qKey dq;
+    			clear inData_1 inData_2 inData_3 inData_4 inData_5 outData;
+    		end
+
+			% combine multipal input and fit data using linear regress.
+    		if subsubsubFlagNonLinearRegress
+				% prepare basic data. SSEi/similarity/numIntra/qstep_key/Dqp_allFrames/qstep_allFrames/Dqp_keyFrames/qstep_keyFrames.
+    			sseY = matSampleAllSeqAllLibAllQp_Train(:, 1);
+    			sim = matSampleAllSeqAllLibAllQp_Train(:, 2);
+    			nIntra = matSampleAllSeqAllLibAllQp_Train(:, 3);
+    			qKey = matSampleAllSeqAllLibAllQp_Train(:, 4);
+    			dq = matSampleAllSeqAllLibAllQp_Train(:, 8);
+    			outData = zeros(length(dq), 1);
+
+				% Set up fittype and options. SSEi/similarity/numIntra/qstep_key/Dqp_allFrames/qstep_allFrames/Dqp_keyFrames/qstep_keyFrames.
+				equation = @(a,x) ((a(1)*x(4)^3+a(2)*x(4)^2)*x(2)*x(3)*x(5)^4+a(3)*x(4)^3*x(5)^3-a(4)*x(4)*x(1)*x(5)-a(5)*x(5));
+				
+				% Fit model to data.
+				aInit = [1;1;1;1;1];
+				[aCoeff,R,J,CovB,MSE,ErrorModelInfo] = nlinfit([sseY sim nIntra qKey dq], outData, equation, aInit);
+			end
+    	end
+    end
 
 	%% compute the best non-integer delta QP with curve fit.
 	if subFlagProcessGainForBestDQPEachLib
@@ -413,371 +804,135 @@ if flagFitForBestDqpEachLib
     
     %% prepare data for curve fit.
     if subFlagPrepareFitData
-        subsubFlagQStep = 1;
-        if subsubFlagQStep
-            zTr = 2 .^ (bestNonIntDqpAllSeq_Train / 6);
-            zTe = 2 .^ (bestNonIntDqpAllSeq_Test / 6);
-        else
-            zTr = bestNonIntDqpAllSeq_Train;
-            zTe = bestNonIntDqpAllSeq_Test;
-        end
-        zTr = zTr .^ 2;
-        zTe = zTe .^ 2;
         
-        idxCase = [5 13];
-        
-        pageStd = 1; pageDist = 2; pageFreq = 3;
-        % data index in order of std, dist, freq.
-        idxData = [
-            1 1 1;    % 1--std, sumDist, freq.
-            1 2 1;    % 2--std, sumDistMC, freq.        x
-            2 1 1;    % 3--stdBlock, sumDist, freq.
-            2 2 1;    % 4--stdBlock, sumDistMC, freq.   x
-            1 3 1;    % 5--std, sumDistLog, freq.
-            2 3 1;    % 6--stdBlock, sumDistLog, freq.
-            ];
-        % train data.
-        dataStd = contentInfoEachLib_Train(:, idxData(idxCase(1), pageStd), pageStd);
-        dataDist = contentInfoEachLib_Train(:, idxData(idxCase(1), pageDist), pageDist);
-        dataFreq = contentInfoEachLib_Train(:, idxData(idxCase(1), pageFreq), pageFreq);
-        dataTr = [
-            % 1--x = (std)/(sumDist);y = (freq)/(std);              x
-            {dataStd./dataDist} {dataFreq./dataStd};
-            % 2--x = (sumDist)/(std);y = (std)/(freq);              x
-            {dataDist./dataStd} {dataStd./dataFreq};
-            % 3--x = (averDist)/(std);y = (std)/(freq);       
-            {dataDist./dataStd./dataFreq} {dataStd./dataFreq};
-            % 4--x = (std)/(averDist);y = (freq)/(std);
-            {dataStd./dataDist.*dataFreq} {dataFreq./dataStd};
-            % 5--x = 1/(averDist*std);y = (freq)/(std);             x
-            {1./dataDist.*dataFreq./dataStd} {dataFreq./dataStd};
-            % 6--x = averDist*std;y = (freq)/(std);                 x
-            {dataDist./dataFreq.*dataStd} {dataFreq./dataStd};
-            % 7--x = averDist/std;y = (1/freq);                       x
-            {dataDist./dataFreq.*dataStd} {1./dataFreq};
-            % 8--x = averDist;y = (1/freq);
-            {dataDist./dataFreq} {1./dataFreq};
-            % 9--x = log(averDist);y = (1/log(freq))
-            {log(dataDist./dataFreq)} {1./log(dataFreq)};
-            % 10--x = sumdist; y=freq
-            {dataDist./dataFreq} {dataFreq}
-            % 11--x = sumdist / freq; y=std/freq
-            {dataDist./dataFreq} {dataStd./dataFreq}
-            % 12--x = sumdist * std / freq; y=std/freq
-            {dataDist.*dataStd./dataFreq} {dataStd./dataFreq}
-            % 13--x = sumdist * std / freq; y=log(std)/freq
-            {dataDist.*log2(dataStd)./dataFreq} {log2(dataStd)./dataFreq}
-            ];
-        % test data.
-        dataStd = contentInfoEachLib_Test(:, idxData(idxCase(1), pageStd), pageStd);
-        dataDist = contentInfoEachLib_Test(:, idxData(idxCase(1), pageDist), pageDist);
-        dataFreq = contentInfoEachLib_Test(:, idxData(idxCase(1), pageFreq), pageFreq);
-        dataTe = [
-            % 1--x = (std)/(sumDist);y = (freq)/(std);
-            {dataStd./dataDist} {dataFreq./dataStd};
-            % 2--x = (sumDist)/(std);y = (std)/(freq);
-            {dataDist./dataStd} {dataStd./dataFreq};
-            % 3--x = (averDist)/(std);y = (std)/(freq);
-            {dataDist./dataStd./dataFreq} {dataStd./dataFreq};
-            % 4--x = (std)/(averDist);y = (freq)/(std);
-            {dataStd./dataDist.*dataFreq} {dataFreq./dataStd};
-            % 5--x = 1/(averDist*std);y = (freq)/(std);
-            {1./dataDist.*dataFreq./dataStd} {dataFreq./dataStd};
-            % 6--x = averDist*std;y = (freq)/(std);
-            {dataDist./dataFreq.*dataStd} {dataFreq./dataStd};
-           % 7--x = averDist/std;y = (1/freq);                       x
-            {dataDist./dataFreq.*dataStd} {1./dataFreq};
-            % 8--x = averDist;y = (1/freq);
-            {dataDist./dataFreq} {1./dataFreq};
-            % 9--x = log(averDist);y = (1/log(freq))
-            {log(dataDist./dataFreq)} {1./log(dataFreq)};
-            % 10--x = sumdist; y=freq
-            {dataDist./dataFreq} {dataFreq}
-            % 11--x = sumdist / freq; y=std/freq
-            {dataDist./dataFreq} {dataStd./dataFreq}
-            % 12--x = sumdist * std / freq; y=std/freq
-            {dataDist.*dataStd./dataFreq} {dataStd./dataFreq}
-            % 13--x = sumdist * log(std) / freq; y=log(std)/freq
-            {dataDist.*log2(dataStd)./dataFreq} {log2(dataStd)./dataFreq}
-            ];
-
-        xTr = dataTr{idxCase(2), 1};
-        yTr = dataTr{idxCase(2), 2};
-        xTe = dataTe{idxCase(2), 1};
-        yTe = dataTe{idxCase(2), 2};
-        
-        [ fitresult, gof, zTeSim, rmseTe ] = computeEquationSurfaceFit( xTr, yTr, zTr, xTe, yTe, zTe, 'poly22', 1 );
-        %[ fitresult, gof, zTeSim, rmseTe ] = computeEquationSurfaceFit( xTe, yTe, zTe, xTr, yTr, zTr, 'poly22', 1 );
-        
-        zTeSim = zTeSim.^0.5;
-        if subsubFlagQStep
-            zTeSim(zTeSim<0.2) = 0.2;
-            zTeSim = log2(zTeSim) * 6;
-        end
-        zTeSimInt = round(zTeSim);
-        zTeSimInt(zTeSimInt<-11) = -11;
-        zTeSimInt(zTeSimInt>2) = 2;
-
-        % compute corresponding BD-rate.
-        gainTotal = cell2mat(gainYEachLibAllSeq_Test);
-        [~, listBestDqp] = min(gainTotal, [], 2);
-        listBestDqp = 3 - listBestDqp;
-        listSimDqp = zTeSimInt;
-        gainMax = computeTotalGain(bitPsnrEachLibALLSeqLibvc_Test, bitPsnrALLSeqAnchor_Test, numFrameEachLibAllSeq_Test, listBestDqp);
-        gainSim = computeTotalGain(bitPsnrEachLibALLSeqLibvc_Test, bitPsnrALLSeqAnchor_Test, numFrameEachLibAllSeq_Test, listSimDqp);
-        
-        output = [listSimDqp;gof.rsquare; gof.rmse; rmseTe; gainSim(:, 1)];
     end
 end
 
-%% process library information.
-if flagFitForBestDqpWholeSeq
-	subFlagProcessContentInfo = 1;
-	subFlagBestQP = 0;
-    subFlagBestQPKeyFrame = 1;
-    subFlagShowData = 1;
+%% check the result.
+if flagCheckResultValidity
+	subFlagFindBestDqpForAllSeqAllLibPicAllQp = 1;
 
-    %% process the content information for model fitting.
-	if subFlagProcessContentInfo
-		
-		contentInfoAllSeq = zeros(numAllSeq, 7, 2);
+	%% find the best delta QP for all sequences, all library pictures, all QP.
+    if subFlagFindBestDqpForAllSeqAllLibPicAllQp
+    	% display information.
+		disp('finding the best delta QP for all sequences, all library pictures, all QP.\n');
+		% collect data.
+		bestDqpAllSeqAllLibPicAllQp_BDrate = [];
+		bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate = [];
+        bestGainAllSeqAllLibPic_BDrate = [];
+        bestGainAllSeqAllLibPicKeyFrames_BDrate = [];
 
 		for idxSeq = 1: numAllSeq
-			% mutual information.
-	    	listClusterCost = cellLibInfo{idxSeq, 2};
-            listClusterCost = listClusterCost';
-
-			% simple content information.
-			listLibFreq = cellLibInfo{idxSeq, 3};
+	    	% prepare data.
 			listIntraPic = cellLibInfo{idxSeq, 4};
 			listOrgLib = cellLibInfo{idxSeq, 5};
 			listRefLib = cellLibInfo{idxSeq, 6};
-			numIntraPic = length(listIntraPic);
-			numLibPic = length(listOrgLib);
-			intraPeriod = cellListSeq{idxSeq, 3};
-
-            averTextureStd =0;
-            stdAllIntraPic = oriContentInfoAllSeq{idxSeq, 1}(:, 2);
-            distAllIntraPic = oriContentInfoAllSeq{idxSeq, 1}(:, 3);
-            distMCAllIntraPic = oriContentInfoAllSeq{idxSeq, 1}(:, 4);
-            mvAllIntraPic = oriContentInfoAllSeq{idxSeq, 2}(:, 1);
-
-			sumDistAllLibPic = zeros(numLibPic, 1);
-            sumSimAllLibPic = zeros(numLibPic, 1);
-
-            sumDistPocAllLibPic = zeros(numLibPic, 1);
-            sumSimPocAllLibPic = zeros(numLibPic, 1);
-            
-            sumDistMCAllLibPic = zeros(numLibPic, 1);
-            sumEnergyMvAllLibPic = zeros(numLibPic, 1);
-            
-			for idxIntraPic = 1: numIntraPic
-				idxLibPic = listRefLib(idxIntraPic) + 1;
-
-				% calculate texture. As for texture, all pictures including key frames that are library pictures should be considered.
-				% method 1: variance of luma.
-                averTextureStd = averTextureStd + stdAllIntraPic(idxIntraPic);
-
-                % skip if the intra picture is the library picture.
-                if listOrgLib(idxLibPic) == listIntraPic(idxIntraPic)
-                	continue;
-                end
-								
-				% compute distance.
-				% method 1: frame difference.
-				dist = distAllIntraPic(idxIntraPic);
-				if dist == 0
-					err('the distance is zeros\n');
+	    	numLibPic = length(listOrgLib);
+	        frameRate = cellListSeq{idxSeq, 3};
+			% read anchor.
+			% collect data.
+			bitPsnrAnchorAllLib = cell(numQP, numLibPic);
+			bitPsnrAnchorAllLibKeyFrames = cell(numQP, numLibPic);
+			for idxQP = 1: numQP
+				strQP = num2str(listQP(idxQP));
+				fileAnchor = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_anchor_gop16_enc.txt'];
+				[bitPsnrAnchor, bitPsnrAnchorKeyFrames, ~, ~, listNumFrames] = readBitPsnrSingleLib(fileAnchor, listOrgLib, listIntraPic, listRefLib, frameRate, 0);
+				for idxLibPic = 1: numLibPic
+					bitPsnrAnchorAllLib(idxQP, idxLibPic) = {bitPsnrAnchor(idxLibPic, 1: 4)};
+					bitPsnrAnchorAllLibKeyFrames(idxQP, idxLibPic) = {bitPsnrAnchorKeyFrames(idxLibPic, 1: 4)};
 				end
-
-				sumDistAllLibPic(idxLibPic) = sumDistAllLibPic(idxLibPic) + dist;
-                sumSimAllLibPic(idxLibPic) = sumSimAllLibPic(idxLibPic) + 1 / dist;
-
-                % method 2: frame poc difference.
-                distPoc = abs(listIntraPic(idxIntraPic) - listOrgLib(idxLibPic)) / intraPeriod;
-                if distPoc == 0
-					err('the distance is zeros\n');
-				end
-                sumDistPocAllLibPic(idxLibPic) = sumDistPocAllLibPic(idxLibPic) + distPoc;
-                sumSimPocAllLibPic(idxLibPic) = sumSimPocAllLibPic(idxLibPic) + 1 / distPoc;
-                
-                % method 3: difference based on motion compensation.
-                distMC = distMCAllIntraPic(idxIntraPic);
-                sumDistMCAllLibPic(idxLibPic) = sumDistMCAllLibPic(idxLibPic) + distMC;
-
-                % method 4: energy of mv.
-                mvCell = mvAllIntraPic{idxIntraPic};
-                [rMvCell, cMvCell] = size(mvCell);
-                energyMv = 0;
-                for idxR = 1: rMvCell
-                	for idxC = 1: cMvCell
-                		energyMv = energyMv + sqrt(sum(mvCell{idxR, idxC} .^ 2));
-                	end
-                end
-                energyMv = energyMv / rMvCell / cMvCell;
-                sumEnergyMvAllLibPic(idxLibPic) = sumEnergyMvAllLibPic(idxLibPic) + energyMv;
 			end
 
-            averTextureStd = averTextureStd / numIntraPic;
+			% collect data.
+			bitPsnrLibPicAllLibAllDqp = cell(numQP, numDqp, numLibPic);
+			bitPsnrLibPicAllLibAllDqpKeyFrames = cell(numQP, numDqp, numLibPic);
+			for idxDqp = 1: numDqp
+				% prepare path.
+				if(listDqp(idxDqp) <= 0)
+					strDqp = num2str(-listDqp(idxDqp));
+				else
+					strDqp = ['0' num2str(listDqp(idxDqp))];
+				end
+				% collect data.
+				for idxQP = 1: numQP
+					strQP = num2str(listQP(idxQP));
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
+					[bitPsnrLib, bitPsnrLibKeyFrames, ~, ~, listNumFrames] = readBitPsnrSingleLib(fileLib, listOrgLib, listIntraPic, listRefLib, frameRate, 1);
+					for idxLibPic = 1: numLibPic
+						bitPsnrLibPicAllLibAllDqp(idxQP, idxDqp, idxLibPic) = {bitPsnrLib(idxLibPic, 1: 4)};
+						bitPsnrLibPicAllLibAllDqpKeyFrames(idxQP, idxDqp, idxLibPic) = {bitPsnrLibKeyFrames(idxLibPic, 1: 4)};
+					end
+				end
+			end
 
-			sumFreq = sum(listLibFreq - 1); % remove the library picture itself.
-	        weight = (listLibFreq - 1) / sumFreq;
-            weight = weight';
-	        expectCost = sum(weight .* listClusterCost);
-	        expectDist = sum(weight .* sumDistAllLibPic);
-            expectSim = sum(weight .* sumSimAllLibPic);
-            expectDistPoc = sum(weight .* sumDistPocAllLibPic);
-            expectSimPoc = sum(weight .* sumSimPocAllLibPic);
-            expectDistMC = sum(weight .* sumDistMCAllLibPic);
-            expectEnergyMv = sum(weight .* sumEnergyMvAllLibPic);
+			% compute BD-rate and find the dest delta QP.
+			for idxLibPic = 1: numLibPic
+				% BD-rate for all frames.
+				bestGain = Inf;
+				bestGainKeyFrames = Inf;
+				bestDqpIdx = zeros(4, 1);
+				bestDqpIdxKeyFrames = zeros(4, 1);
+				% temporal memory for QP 22, 27, 32, 37.
+				bitPsnrAnchor = [bitPsnrAnchorAllLib{1, idxLibPic}; bitPsnrAnchorAllLib{2, idxLibPic}; bitPsnrAnchorAllLib{3, idxLibPic}; bitPsnrAnchorAllLib{4, idxLibPic};];
+				bitPsnrAnchorKeyFrames = [bitPsnrAnchorAllLibKeyFrames{1, idxLibPic}; bitPsnrAnchorAllLibKeyFrames{2, idxLibPic}; bitPsnrAnchorAllLibKeyFrames{3, idxLibPic}; bitPsnrAnchorAllLibKeyFrames{4, idxLibPic};];
+				bitPsnrLib = zeros(4, 4);
+				bitPsnrLibKeyFrames = zeros(4, 4);
 
-            contentInfoAllSeq(idxSeq, 1, 1) = averTextureStd;            
-			contentInfoAllSeq(idxSeq, 1, 2) = expectCost;
-			contentInfoAllSeq(idxSeq, 2, 2) = expectDist;
-            contentInfoAllSeq(idxSeq, 3, 2) = expectSim;
-            contentInfoAllSeq(idxSeq, 4, 2) = expectDistPoc;
-            contentInfoAllSeq(idxSeq, 5, 2) = expectSimPoc;
-            contentInfoAllSeq(idxSeq, 6, 2) = expectDistMC;
-            contentInfoAllSeq(idxSeq, 7, 2) = expectEnergyMv;
+				for idxDqp1 = 1: numDqp
+					bitPsnrLib(1, :) = bitPsnrLibPicAllLibAllDqp{1, idxDqp1, idxLibPic};
+					bitPsnrLibKeyFrames(1, :) = bitPsnrLibPicAllLibAllDqpKeyFrames{1, idxDqp1, idxLibPic};
+					for idxDqp2 = 1: numDqp
+						bitPsnrLib(2, :) = bitPsnrLibPicAllLibAllDqp{2, idxDqp2, idxLibPic};
+						bitPsnrLibKeyFrames(2, :) = bitPsnrLibPicAllLibAllDqpKeyFrames{2, idxDqp2, idxLibPic};
+						for idxDqp3 = 1: numDqp
+							bitPsnrLib(3, :) = bitPsnrLibPicAllLibAllDqp{3, idxDqp3, idxLibPic};
+							bitPsnrLibKeyFrames(3, :) = bitPsnrLibPicAllLibAllDqpKeyFrames{3, idxDqp3, idxLibPic};
+							for idxDqp4 = 1: numDqp
+								bitPsnrLib(4, :) = bitPsnrLibPicAllLibAllDqp{4, idxDqp4, idxLibPic};
+								bitPsnrLibKeyFrames(4, :) = bitPsnrLibPicAllLibAllDqpKeyFrames{4, idxDqp4, idxLibPic};
+
+								% compute BD-rate.
+								gainTmp = bdRateComparation( bitPsnrAnchor, bitPsnrLib );
+								if gainTmp(1) < bestGain
+									bestDqpIdx = [idxDqp1; idxDqp2; idxDqp3; idxDqp4];
+                                    bestGain = gainTmp(1);
+								end
+								gainTmpKeyFrames = bdRateComparation( bitPsnrAnchorKeyFrames, bitPsnrLibKeyFrames );
+								if gainTmpKeyFrames < bestGainKeyFrames
+									bestDqpIdxKeyFrames = [idxDqp1; idxDqp2; idxDqp3; idxDqp4];
+                                    bestGainKeyFrames = gainTmpKeyFrames(1);
+								end
+							end
+						end
+					end
+				end
+				% collect data.
+				bestDqpAllSeqAllLibPicAllQp_BDrate = [bestDqpAllSeqAllLibPicAllQp_BDrate; listDqp(bestDqpIdx)'];
+				bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate = [bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate; listDqp(bestDqpIdxKeyFrames)'];
+				bestGainAllSeqAllLibPic_BDrate = [bestGainAllSeqAllLibPic_BDrate; bestGain];
+				bestGainAllSeqAllLibPicKeyFrames_BDrate = [bestGainAllSeqAllLibPicKeyFrames_BDrate; bestGainKeyFrames];
+			end
 		end
-    end 
 
-    %% compute OPT-DQP for samples.
-	if subFlagBestQP
-		numBestDqp = 3;
-		[gainSort, idxSort] = sort(gainYUVAllSeq, 2, 'ascend');
-		bestDqpSeqAllSeq = zeros(numAllSeq, numBestDqp);
-        weightBestDqpSeqAllSeq = zeros(numAllSeq, numBestDqp);
-        rangeWeight = 0.005;
-		for idxSeq = 1: numAllSeq
-			idxBestDqp = idxSort(idxSeq, 1: numBestDqp);
-			bestDqpSeqAllSeq(idxSeq, :) = listDqp(idxBestDqp);
-			bestPerformance = gainYUVAllSeq(idxSeq, idxBestDqp);
-            weightBestDqpSeqAllSeq(idxSeq, :) = max(0, 1 - (bestPerformance - bestPerformance(1)) / rangeWeight);
-        end
-        
-        bestDqpAllSeq = bestDqpSeqAllSeq;
-        weightBestDqpAllSeq = weightBestDqpSeqAllSeq;
+		if flagReadSeqListTrain
+			bestDqpAllSeqAllLibPicAllQp_BDrate_Train = bestDqpAllSeqAllLibPicAllQp_BDrate;
+			bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate_Train = bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate;
+			bestGainAllSeqAllLibPic_BDrate_Train = bestGainAllSeqAllLibPic_BDrate;
+			bestGainAllSeqAllLibPicKeyFrames_BDrate_Train = bestGainAllSeqAllLibPicKeyFrames_BDrate;
+		elseif flagReadSeqListTest
+			bestDqpAllSeqAllLibPicAllQp_BDrate_Test = bestDqpAllSeqAllLibPicAllQp_BDrate;
+			bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate_Test = bestDqpAllSeqAllLibPicAllQpKeyFrames_BDrate;
+			bestGainAllSeqAllLibPic_BDrate_Test = bestGainAllSeqAllLibPic_BDrate;
+			bestGainAllSeqAllLibPicKeyFrames_BDrate_Test = bestGainAllSeqAllLibPicKeyFrames_BDrate;
+		end
+
+		% clear temp data.
+		clear frameRate dqp qp strDqp strQP fileLibInfo numLibPic strDqp fileLib;
+		clear strQP fileAnchor listLibPoc listNumFrames;
+		clear gain bitPsnrAnchor bitPsnrLib bitPsnrAnchorKeyFrames bitPsnrLibKeyFrames;
+		clear bitPsnrAnchorAllLib bitPsnrLibAllLib bitPsnrAnchorAllLibKeyFrames bitPsnrLibAllLibKeyFrames;
+		clear bestGain bestGainKeyFrames bestDqpIdx bestDqpIdxKeyFrames gainTmp gainTmpKeyFrames ;
+		clear idxDqp1 idxDqp2 idxDqp3 idxDqp4 idxDqp idxLibPic;
+		clear bitPsnrLibPicAllLibAllDqp bitPsnrLibPicAllLibAllDqpKeyFrames;
     end
-    
-    if subFlagBestQPKeyFrame
-		numBestDqp = 3;
-		[gainSort, idxSort] = sort(gainKeyYUVAllSeq, 2, 'ascend');
-		bestDqpKeyAllSeq = zeros(numAllSeq, numBestDqp);
-        weightBestDqpKeyAllSeq = zeros(numAllSeq, numBestDqp);
-        rangeWeight = 0.01;
-		for idxSeq = 1: numAllSeq
-			idxBestDqp = idxSort(idxSeq, 1: numBestDqp);
-			bestDqpKeyAllSeq(idxSeq, :) = listDqp(idxBestDqp);
-			bestPerformance = gainKeyYUVAllSeq(idxSeq, idxBestDqp);
-            weightBestDqpKeyAllSeq(idxSeq, :) = max(0, 1 - (bestPerformance - bestPerformance(1)) / rangeWeight);
-        end
-        bestDqpAllSeq = bestDqpKeyAllSeq;
-        weightBestDqpAllSeq = weightBestDqpKeyAllSeq;
-    end
-    
-
-    %% compute affecting factor for samples.
-	if subFlagShowData
-		subsubFlag1 = 1;
-		subsubFlag2 = 1;
-        subsubFlag3 = 1;
-		subsubFlag4 = 1;
-		subsubFlag5 = 1;
-        subsubFlag6 = 1;
-
-		sampleSet = zeros(numAllSeq * numBestDqp, 3);
-		weightSet = zeros(numAllSeq * numBestDqp, 1);
-		
-		% 1----average std and expectation cluster cost.
-		if subsubFlag1
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 1, 2) bestDqpAllSeq(:, idxBestDqp)];
-				weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x1 = sampleSet(:, 1);
-            y1 = sampleSet(:, 2);
-            z1 = sampleSet(:, 3);
-            x1_1 = log(sampleSet(:, 1) + 1);
-            y1_1 = log(sampleSet(:, 2) + 1);
-            z1_1 = sampleSet(:, 3);
-        end
-        % 2----average std and expectation frame difference.
-		if subsubFlag2
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 2, 2) bestDqpAllSeq(:, idxBestDqp)];
-            	weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x2 = sampleSet(:, 1);
-            y2 = sampleSet(:, 2);
-            z2 = sampleSet(:, 3);
-            x2_1 = log(sampleSet(:, 1) + 1);
-            y2_1 = log(sampleSet(:, 2) + 1);
-            z2_1 = sampleSet(:, 3);
-        end
-		% 3----average std and expectation similarity based on frame difference.
-		if subsubFlag3
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 3, 2) bestDqpAllSeq(:, idxBestDqp)];
-            	weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x3 = sampleSet(:, 1);
-            y3 = sampleSet(:, 2);
-            z3 = sampleSet(:, 3);
-            x3_1 = log(sampleSet(:, 1) + 1);
-            y3_1 = log(sampleSet(:, 2) + 1);
-            z3_1 = sampleSet(:, 3);
-        end
-        % 4----average std and expect frame poc difference.
-		if subsubFlag4
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 4, 2) bestDqpAllSeq(:, idxBestDqp)];
-            	weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x4 = sampleSet(:, 1);
-            y4 = sampleSet(:, 2);
-            z4 = sampleSet(:, 3);
-            x4_1 = log(sampleSet(:, 1) + 1);
-            y4_1 = log(sampleSet(:, 2) + 1);
-            z4_1 = sampleSet(:, 3);
-        end
-        % 5----average std and expect similarity based on frame poc difference.
-		if subsubFlag5
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 5, 2) bestDqpAllSeq(:, idxBestDqp)];
-            	weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x5 = sampleSet(:, 1);
-            y5 = sampleSet(:, 2);
-            z5 = sampleSet(:, 3);
-            x5_1 = log(sampleSet(:, 1) + 1);
-            y5_1 = log(sampleSet(:, 2) + 1);
-            z5_1 = sampleSet(:, 3);
-        end
-        % 6----average std and expect difference based on motion compensation.
-		if subsubFlag6
-			for idxBestDqp = 1: numBestDqp
-				startPos = (idxBestDqp - 1) * numAllSeq + 1;
-				endPos = startPos + numAllSeq - 1;
-				sampleSet(startPos: endPos, :) = [contentInfoAllSeq(:, 1, 1) contentInfoAllSeq(:, 6, 2) bestDqpAllSeq(:, idxBestDqp)];
-            	weightSet(startPos: endPos) = weightBestDqpAllSeq(:, idxBestDqp);
-            end
-            x6 = sampleSet(:, 1);
-            y6 = sampleSet(:, 2);
-            z6 = sampleSet(:, 3);
-            x6_1 = log(sampleSet(:, 1) + 1);
-            y6_1 = log(sampleSet(:, 2) + 1);
-            z6_1 = sampleSet(:, 3);
-        end
-	end
 end
