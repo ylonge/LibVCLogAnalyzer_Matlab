@@ -4,8 +4,9 @@ flagReadSeqListTrain = 0;
 flagReadLibInfo = 0;
 flagReadLogFile = 0;
 flagPrepareContentInfo = 0;
-flagFitForBestDqpEachLib = 1;
+flagFitForBestDqpEachLib = 0;
 flagCheckResultValidity = 0;
+flagModelVerify = 1;
 
 % prepare basic information.
 listQP = 22:5:37;
