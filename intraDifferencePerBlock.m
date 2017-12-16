@@ -5,7 +5,7 @@ function [ err ] = intraDifferencePerBlock( trgPic, trgBlock, idxBlockInWidth, i
 %   --trgBlock: block which is compute difference on.
 %   --idxBlockInWidth: indicate the width idx of block in picture.
 %   --idxBlockInHeight: indicate the height idx of block in picture.
-%   --err: the difference between two pictures after motion compensation.
+%   --err: the difference in intra mode.
 
 blockSize = size(trgBlock, 1);
 

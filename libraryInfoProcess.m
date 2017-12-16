@@ -1,7 +1,7 @@
 %% This script is used to read library information for all sequences with all QPs and delta QPs.
-flagReadSeqListTest = 0;
+flagReadSeqListTest = 1;
 flagReadSeqListTrain = 0;
-flagReadLibInfo = 0;
+flagReadLibInfo = 1;
 flagReadLogFile = 0;
 flagPrepareContentInfo = 0;
 flagFitForBestDqpEachLib = 0;
@@ -468,7 +468,7 @@ if flagPrepareContentInfo
                 end
             end
             toc
-
+            % 											1				2					3				4-5				6-7						8-9						10
 			oriContentInfoAllSeq(idxSeq, 1) = { [stdAllIntraPic stdBlockAllIntraPic distAllIntraPic distMCAllIntraPic distIntraAllIntraPic percentIntraAllIntraPic selfIntraAllIntraPic] };
 			if subsubFlagComputeMC
             	oriContentInfoAllSeq(idxSeq, 2) = {storeMv};
@@ -936,4 +936,711 @@ if flagCheckResultValidity
 		clear idxDqp1 idxDqp2 idxDqp3 idxDqp4 idxDqp idxLibPic;
 		clear bitPsnrLibPicAllLibAllDqp bitPsnrLibPicAllLibAllDqpKeyFrames;
     end
+end
+
+%% This part 
+if flagModelVerify
+	subFlagReadVerifyData = 0;
+	subFlagVerifyModelR_Q_lambda = 0;
+	subFlagHeaderRateModel = 0;
+	subFlagVerifyModelD_Q_lambda = 0;
+	subFlagVerifyModelR_D = 0;
+	subFlagVerifyModelAll = 1;
+
+	%% read verify data of rate and psnr of library pictures and key pictures.
+	if subFlagReadVerifyData
+		% collect data.
+		bitPsnrLibKeyAllSeq = cell(numAllSeq, 1);
+
+		% loop for all sequences.
+		for idxSeq = 1: numAllSeq
+			% prepare data.
+			listLibFreq = cellLibInfo{idxSeq, 3};
+			listIntraPic = cellLibInfo{idxSeq, 4};
+			listOrgLib = cellLibInfo{idxSeq, 5};
+			listRefLib = cellLibInfo{idxSeq, 6};
+			numLibPic = length(listOrgLib);
+			numIntraPic = length(listIntraPic);
+
+			% collect data.
+			bitPsnrLibKeyAllQp = cell(numQP, 1);
+
+			% loop for each base QP.
+			for idxQP = 1: numQP
+				% prepare log path.
+				strQP = num2str(listQP(idxQP));
+
+				% for each dqp.
+				% collect data.
+				bitPsnrALLDqp = cell(numDqp, 1);
+
+				for idxDqp = 1: numDqp
+					% collect data.
+					bitPsnrAllLib = cell(numLibPic, 2);
+
+					% prepare log path.
+					if(listDqp(idxDqp) <= 0)
+						strDqp = num2str(-listDqp(idxDqp));
+					else
+						strDqp = ['0' num2str(listDqp(idxDqp))];
+					end
+					fileLib = [path cellListSeq{idxSeq, 2} '\Sequence_' strQP '_libvc_gop16_fixQP_' strDqp '_enc.txt'];
+
+					for idxLibPic = 1: numLibPic
+						% prepare data.
+						numIntraPicPerLib = listLibFreq(idxLibPic);
+						pocLibPic = idxLibPic - 1;
+
+						% collect library picture.
+						% datatype: dataPoc dataType dataQP dataBit dataPSNRY dataPSNRU dataPSNRV.
+						bitPsnrAllLib(idxLibPic, 1) = {readBitPsnrWithPoc( fileLib, pocLibPic, 1 )};
+						% collect key picture.
+						listIntraPocPerLib = zeros(numIntraPicPerLib, 1);
+						count = 1;
+						for idxIntraPic = 1: numIntraPic
+							if listRefLib(idxIntraPic) ~= pocLibPic
+								continue;
+							else
+								listIntraPocPerLib(count) = listIntraPic(idxIntraPic);
+								count = count + 1;
+							end
+						end
+						bitPsnrAllLib(idxLibPic, 2) = {readBitPsnrWithPoc( fileLib, listIntraPocPerLib, 0)};
+					end
+					% collect data.
+					bitPsnrALLDqp(idxDqp) = {bitPsnrAllLib};
+				end
+				% collect data.
+				bitPsnrLibKeyAllQp(idxQP) = {bitPsnrALLDqp};
+			end
+			% collect data.
+			bitPsnrLibKeyAllSeq(idxSeq) = {bitPsnrLibKeyAllQp};
+        end
+        if flagReadSeqListTrain
+            bitPsnrLibKeyAllSeq_Train = bitPsnrLibKeyAllSeq;
+        elseif flagReadSeqListTest
+            bitPsnrLibKeyAllSeq_Test = bitPsnrLibKeyAllSeq;
+        end
+
+		% clear temp data.
+		clear idxLibPic numIntraPicPerLib pocLibPic bitPsnrAllLib listIntraPocPerLib count idxIntraPic;
+		clear idxDqp bitPsnrAllLib strDqp fileLib;
+		clear listLibFreq listIntraPic listOrgLib listRefLib numLibPic numIntraPic;
+	end
+
+	%% verify the rate model.
+	if subFlagVerifyModelR_Q_lambda
+		subsubFlagR_model = 0;
+		subsubFlagIndependentRateModel = 1;
+		subsubFlagDependentRateModel = 0;
+
+		%% verify the R-Q model.
+		if subsubFlagR_model
+			% prepare data of each picture with different QP.
+
+            % prepare data.
+			if flagReadSeqListTrain
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Train;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Train;
+            elseif flagReadSeqListTest
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Test;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Test;
+            end
+			% collect data.
+			r2RQAllSeq = cell(numAllSeq, 2);
+			r2RQAverAllSeq = zeros(numAllSeq, 3, 2);
+			for idxSeq = 1: numAllSeq
+				% prepare data.
+				listLibFreq = cellLibInfo{idxSeq, 3};
+				listIntraPic = cellLibInfo{idxSeq, 4};
+				listOrgLib = cellLibInfo{idxSeq, 5};
+				listRefLib = cellLibInfo{idxSeq, 6};
+				numLibPic = length(listOrgLib);
+				numIntraPic = length(listIntraPic);
+
+				% collect data. There are 3 models to test.
+				r2AllLibPic = zeros(numLibPic, 3);
+				r2AllKeyPic = zeros(numIntraPic, 3, numDqp);
+				r2SumAllKeyPic = zeros(numIntraPic, 3);
+
+				% collect library picture data.
+				for idxLibPic = 1: numLibPic
+					% collect data.
+					rateQPAllQP = zeros(numQP * numDqp, 2);
+
+					for idxQP = 1: numQP
+						for idxDqp = 1: numDqp
+							rateQPAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(3);
+							rateQPAllQP((idxQP-1)*numDqp + idxDqp, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(4);
+						end
+					end
+					% remove repeat data.
+					rateQPAllQP = unique(rateQPAllQP, 'rows');
+					% convert data to proper type.
+					rateAllQP = rateQPAllQP(:, 2);
+					qpAllQP = rateQPAllQP(:, 1);
+					qAllQP = 2 .^ ((qpAllQP - 4) / 6); % convert QP to Q.
+					lambdaAllQP = 0.57 * 2 .^ ((qpAllQP - 12) / 3); % convert QP to lambda.
+					% fit data.
+					flagShow = 0;
+                	startPoint_quadric = [1 1 1];
+					equationR_Q_quadric = 'a/x+b/x/x+c'; 
+                    startPoint_linear_lambda = [1 1];
+					equationR_Q_linear = 'a/x+b';
+					equationR_lambda = 'a*x^b';
+					[ fitRes, gof ] = computeEquationFit( qAllQP, rateAllQP, equationR_Q_quadric, startPoint_quadric, flagShow );
+					r2AllLibPic(idxLibPic, 1) = gof.rsquare;
+					[ fitRes, gof ] = computeEquationFit( qAllQP, rateAllQP, equationR_Q_linear, startPoint_linear_lambda, flagShow );
+					r2AllLibPic(idxLibPic, 2) = gof.rsquare;
+					[ fitRes, gof ] = computeEquationFit( lambdaAllQP, rateAllQP, equationR_lambda, startPoint_linear_lambda, flagShow );
+					r2AllLibPic(idxLibPic, 3) = gof.rsquare;
+				end
+
+				% collect key picture data.
+				countKeyPicPerLib = zeros(numLibPic, 1) + 1;
+				for idxKeyPic = 1: numIntraPic
+					% prepare data.
+					idxLibPic = listRefLib(idxKeyPic) + 1;
+					idxKeyPicPerLib = countKeyPicPerLib(idxLibPic);
+					% skip the key picture which reference itself.
+					if listOrgLib(listRefLib(idxKeyPic) + 1) == listIntraPic(idxKeyPic)
+						countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+                        continue;
+					end
+					% loop for each dqp.
+					for idxDqp = 1: numDqp
+						% collect data.
+						rateQPAllQP = zeros(numQP, 2);
+
+						for idxQP = 1: numQP
+							rateQPAllQP(idxQP, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 3);
+							rateQPAllQP(idxQP, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 4);
+						end
+						% convert data to proper type.
+						rateAllQP = rateQPAllQP(:, 2);
+						qpAllQP = rateQPAllQP(:, 1);
+						qAllQP = 2 .^ ((qpAllQP - 4) / 6); % convert QP to Q.
+						lambdaAllQP = 0.57 * 2 .^ ((qpAllQP - 12) / 3); % convert QP to lambda.
+						% fit data.
+						flagShow = 0;
+	                	startPoint_quadric = [1 1 1];
+                        equationR_Q_quadric = 'a/x+b/x/x+c'; 
+                        startPoint_linear_lambda = [1 1];
+						equationR_Q_linear = 'a/x+b';
+						equationR_lambda = 'a*x^b';
+						[ fitRes, gof ] = computeEquationFit( qAllQP, rateAllQP, equationR_Q_quadric, startPoint_quadric, flagShow );
+						r2AllKeyPic(idxKeyPic, 1, idxDqp) = gof.rsquare;
+						r2SumAllKeyPic(idxKeyPic, 1) = r2SumAllKeyPic(idxKeyPic, 1) + gof.rsquare;
+						[ fitRes, gof ] = computeEquationFit( qAllQP, rateAllQP, equationR_Q_linear, startPoint_linear_lambda, flagShow );
+						r2AllKeyPic(idxKeyPic, 2, idxDqp) = gof.rsquare;
+						r2SumAllKeyPic(idxKeyPic, 2) = r2SumAllKeyPic(idxKeyPic, 2) + gof.rsquare;
+						[ fitRes, gof ] = computeEquationFit( lambdaAllQP, rateAllQP, equationR_lambda, startPoint_linear_lambda, flagShow );
+						r2AllKeyPic(idxKeyPic, 3, idxDqp) = gof.rsquare;
+						r2SumAllKeyPic(idxKeyPic, 3) = r2SumAllKeyPic(idxKeyPic, 3) + gof.rsquare;
+					end
+					% count the number of key pictures.
+					countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+				end
+				% collect data.
+				r2RQAllSeq(idxSeq, 1) = {r2AllLibPic};
+                r2RQAllSeq(idxSeq, 2) = {r2AllKeyPic};
+				r2RQAverAllSeq(idxSeq, :, 1) = mean(r2AllLibPic);
+				r2RQAverAllSeq(idxSeq, :, 2) = sum(r2SumAllKeyPic) / numDqp / (numIntraPic - numLibPic);
+            end
+            if flagReadSeqListTrain
+                r2RQAllSeq_Train = r2RQAllSeq;
+                r2RQAverAllSeq_Train = r2RQAverAllSeq;
+            elseif flagReadSeqListTest
+                r2RQAllSeq_Test = r2RQAllSeq;
+                r2RQAverAllSeq_Test = r2RQAverAllSeq;
+            end
+			% clear temp data.
+			clear idxSeq listLibFreq listIntraPic listOrgLib listRefLib numLibPic numIntraPic;
+			clear r2AllLibPic r2AllKeyPic r2SumAllKeyPic;
+			clear idxLibPic rateQPAllQP idxQP idxDqp rateAllQP qpAllQP qAllQP lambdaAllQP;
+			clear flagShow startPoint equationR_Q_quadric equationR_Q_linear equationR_lambda gof;
+		end
+
+		%% verify the independent rate model.
+		if subsubFlagIndependentRateModel
+			%% prepare bits and intra residue of library pictures and verify the R-Q model.
+
+			% prepare data.
+			if flagReadSeqListTrain
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Train;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Train;
+            elseif flagReadSeqListTest
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Test;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Test;
+            end
+			% collect data.
+			r2AllSeq = zeros(numAllSeq, 2);
+			r2General = zeros(1, 2);
+			rateGeneral = [];
+			qGeneral = [];
+			predResiGeneral = [];
+			for idxSeq = 1: numAllSeq
+				% prepare data.
+				listLibFreq = cellLibInfo{idxSeq, 3};
+				listIntraPic = cellLibInfo{idxSeq, 4};
+				listOrgLib = cellLibInfo{idxSeq, 5};
+				listRefLib = cellLibInfo{idxSeq, 6};
+				numLibPic = length(listOrgLib);
+				numIntraPic = length(listIntraPic);
+				predResiAllLib = oriContentInfoAllSeq{idxSeq}(:, 10); % predicted intra residue.
+				predResiAllLib = predResiAllLib(predResiAllLib > 0);
+				if length(predResiAllLib) ~= numLibPic
+					error('error in read predicted residue of library pictures');
+                end
+
+				% collect library picture data.
+				% since the predicted residue is considered, library pictures in a sequence are treated as a set of train data.
+				rateAllQP = [];
+				qAllQP = [];
+				predResiAllQP = [];
+				for idxLibPic = 1: numLibPic
+					% prepare data.
+					predResiPerLib = predResiAllLib(idxLibPic);
+					% collect data.
+					rateQPAllQP = zeros(numQP * numDqp, 2);
+
+					for idxQP = 1: numQP
+						for idxDqp = 1: numDqp
+							rateQPAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(3);
+							rateQPAllQP((idxQP-1)*numDqp + idxDqp, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(4);
+						end
+					end
+					% remove repeat data.
+					rateQPAllQP = unique(rateQPAllQP, 'rows');
+					% convert data to proper type.
+					rateAllQP = [rateAllQP; rateQPAllQP(:, 2)];
+					qpAllQP = rateQPAllQP(:, 1);
+					qAllQP = [qAllQP; 2 .^ ((qpAllQP - 4) / 6)]; % convert QP to Q.
+					predResiAllQP = [predResiAllQP; predResiPerLib * ones(size(qpAllQP))];
+				end
+				% fit data.
+				flagShow = 0;
+            	startPoint_quadric = [1 1 1];
+                equationR_Q_quadric = fittype('a*y./x+b*y./x./x+c', ...
+                    'independent', {'x','y'}, ...
+                    'coefficients',{'a','b','c'}, ...
+                    'dependent', 'z');
+                startPoint_linear_lambda = [1 1];
+                equationR_Q_linear = fittype('a*y./x+b', ...
+                    'independent', {'x','y'}, ...
+                    'coefficients',{'a','b'}, ...
+                    'dependent', 'z');
+				[ fitRes, gof ] = computeEquationSurfaceFit( qAllQP, predResiAllQP, rateAllQP, qAllQP, predResiAllQP, rateAllQP, equationR_Q_quadric, flagShow );
+				r2AllSeq(idxSeq, 1) = gof.rsquare;
+				[ fitRes, gof ] = computeEquationSurfaceFit( qAllQP, predResiAllQP, rateAllQP, qAllQP, predResiAllQP, rateAllQP, equationR_Q_linear, flagShow );
+				r2AllSeq(idxSeq, 2) = gof.rsquare;
+
+				% collect data for general fit.
+				rateGeneral = [rateGeneral; rateAllQP];
+				qGeneral = [qGeneral; qAllQP];
+				predResiGeneral = [predResiGeneral; predResiAllQP];
+            end
+
+            [ fitRes, gof ] = computeEquationSurfaceFit( qGeneral, predResiGeneral, rateGeneral, qGeneral, predResiGeneral, rateGeneral, equationR_Q_quadric, flagShow );
+			r2General(1) = gof.rsquare;
+			[ fitRes, gof ] = computeEquationSurfaceFit( qGeneral, predResiGeneral, rateGeneral, qGeneral, predResiGeneral, rateGeneral, equationR_Q_linear, flagShow );
+			r2General(2) = gof.rsquare;
+
+            if flagReadSeqListTrain
+                r2AllSeq_Train = r2AllSeq;
+                r2General_Train = r2General;
+            elseif flagReadSeqListTest
+                r2AllSeq_Test = r2AllSeq;
+                r2General_Test = r2General;
+            end
+			% clear temp data.
+			clear idxSeq listLibFreq listIntraPic listOrgLib listRefLib numLibPic numIntraPic;
+			clear r2AllLibPic r2AllKeyPic r2SumAllKeyPic;
+			clear idxLibPic rateQPAllQP idxQP idxDqp rateAllQP qpAllQP qAllQP predResiAllQP;
+			clear flagShow startPoint equationR_Q_quadric equationR_Q_linear equationR_lambda gof;
+		end
+		%% verify the dependent rate model.
+		if subsubFlagDependentRateModel
+
+		end
+
+	end
+
+	%% verify the distortion model.
+	if subFlagVerifyModelD_Q_lambda
+		subsubFlagIndependentDistModel = 1;
+		subsubFlagDependentDistModel = 0;
+
+		if subsubFlagIndependentDistModel
+			% prepare data of each picture with different QP.
+			% prepare data.
+			maxVar = 255;
+			if flagReadSeqListTrain
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Train;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Train;
+            elseif flagReadSeqListTest
+				oriContentInfoAllSeq = oriContentInfoAllSeq_Test;
+                bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Test;
+            end
+			% collect data.
+			r2DQAllSeq = cell(numAllSeq, 2);
+			r2DQAverAllSeq = zeros(numAllSeq, 3, 2);
+			for idxSeq = 1: numAllSeq
+				% prepare data.
+				listLibFreq = cellLibInfo{idxSeq, 3};
+				listIntraPic = cellLibInfo{idxSeq, 4};
+				listOrgLib = cellLibInfo{idxSeq, 5};
+				listRefLib = cellLibInfo{idxSeq, 6};
+				numLibPic = length(listOrgLib);
+				numIntraPic = length(listIntraPic);
+
+				% collect data. There are 3 models to test.
+				r2AllLibPic = zeros(numLibPic, 3);
+				r2AllKeyPic = zeros(numIntraPic, 3, numDqp);
+				r2SumAllKeyPic = zeros(numIntraPic, 3);
+
+				% collect library picture data.
+				for idxLibPic = 1: numLibPic
+					% collect data.
+					distQPAllQP = zeros(numQP * numDqp, 2);
+
+					for idxQP = 1: numQP
+						for idxDqp = 1: numDqp
+							distQPAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(3);
+							distQPAllQP((idxQP-1)*numDqp + idxDqp, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(5);
+						end
+					end
+					% remove repeat data.
+					distQPAllQP = unique(distQPAllQP, 'rows');
+					% convert data to proper type.
+					distAllQP = maxVar * maxVar ./ (10 .^ (distQPAllQP(:, 2) ./ 10));
+					qpAllQP = distQPAllQP(:, 1);
+					qAllQP = 2 .^ ((qpAllQP - 4) / 6); % convert QP to Q.
+					lambdaAllQP = 0.57 * 2 .^ ((qpAllQP - 12) / 3); % convert QP to lambda.
+					% fit data.
+					flagShow = 0;
+                	startPoint_linear = [1];
+					equationD_Q_linear = 'a*x'; 
+                    startPoint_power_lambda = [1 1];
+					equationD_Q_power = 'a*x^b';
+					equationD_lambda = 'a*x^b';
+					[ fitRes, gof ] = computeEquationFit( qAllQP, distAllQP, equationD_Q_linear, startPoint_linear, flagShow );
+					r2AllLibPic(idxLibPic, 1) = gof.rsquare;
+					[ fitRes, gof ] = computeEquationFit( qAllQP, distAllQP, equationD_Q_power, startPoint_power_lambda, flagShow );
+					r2AllLibPic(idxLibPic, 2) = gof.rsquare;
+					[ fitRes, gof ] = computeEquationFit( lambdaAllQP, distAllQP, equationD_lambda, startPoint_power_lambda, flagShow );
+					r2AllLibPic(idxLibPic, 3) = gof.rsquare;
+				end
+
+				% collect key picture data.
+				countKeyPicPerLib = zeros(numLibPic, 1) + 1;
+				for idxKeyPic = 1: numIntraPic
+					% prepare data.
+					idxLibPic = listRefLib(idxKeyPic) + 1;
+					idxKeyPicPerLib = countKeyPicPerLib(idxLibPic);
+					% skip the key picture which reference itself.
+					if listOrgLib(listRefLib(idxKeyPic) + 1) == listIntraPic(idxKeyPic)
+						countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+                        continue;
+					end
+					% loop for each dqp.
+					for idxDqp = 1: numDqp
+						% collect data.
+						distQPAllQP = zeros(numQP, 2);
+
+						for idxQP = 1: numQP
+							distQPAllQP(idxQP, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 3);
+							distQPAllQP(idxQP, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 5);
+						end
+						% convert data to proper type.
+						distAllQP = maxVar * maxVar ./ (10 .^ (distQPAllQP(:, 2) ./ 10));
+						qpAllQP = distQPAllQP(:, 1);
+						qAllQP = 2 .^ ((qpAllQP - 4) / 6); % convert QP to Q.
+						lambdaAllQP = 0.57 * 2 .^ ((qpAllQP - 12) / 3); % convert QP to lambda.
+						% fit data.
+						flagShow = 0;
+		            	startPoint_linear = [1];
+						equationD_Q_linear = 'a*x'; 
+		                startPoint_power_lambda = [1 1];
+						equationD_Q_power = 'a*x^b';
+						equationD_lambda = 'a*x^b';
+						[ fitRes, gof ] = computeEquationFit( qAllQP, distAllQP, equationD_Q_linear, startPoint_linear, flagShow );
+                        r2AllKeyPic(idxKeyPic, 1, idxDqp) = gof.rsquare;
+                        r2SumAllKeyPic(idxKeyPic, 1) = r2SumAllKeyPic(idxKeyPic, 1) + gof.rsquare;
+						[ fitRes, gof ] = computeEquationFit( qAllQP, distAllQP, equationD_Q_power, startPoint_power_lambda, flagShow );
+						r2AllKeyPic(idxKeyPic, 2, idxDqp) = gof.rsquare;
+                        r2SumAllKeyPic(idxKeyPic, 2) = r2SumAllKeyPic(idxKeyPic, 2) + gof.rsquare;
+						[ fitRes, gof ] = computeEquationFit( lambdaAllQP, distAllQP, equationD_lambda, startPoint_power_lambda, flagShow );
+						r2AllKeyPic(idxKeyPic, 3, idxDqp) = gof.rsquare;
+                        r2SumAllKeyPic(idxKeyPic, 3) = r2SumAllKeyPic(idxKeyPic, 3) + gof.rsquare;
+					end
+					% count the number of key pictures.
+					countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+				end
+				% collect data.
+				r2DQAllSeq(idxSeq, 1) = {r2AllLibPic};
+                r2DQAllSeq(idxSeq, 2) = {r2AllKeyPic};
+				r2DQAverAllSeq(idxSeq, :, 1) = mean(r2AllLibPic);
+				r2DQAverAllSeq(idxSeq, :, 2) = sum(r2SumAllKeyPic) / numDqp / (numIntraPic - numLibPic);
+            end
+            if flagReadSeqListTrain
+                r2DQAllSeq_Train = r2DQAllSeq;
+                r2DQAverAllSeq_Train = r2DQAverAllSeq;
+            elseif flagReadSeqListTest
+                r2DQAllSeq_Test = r2DQAllSeq;
+                r2DQAverAllSeq_Test = r2DQAverAllSeq;
+            end
+			% clear temp data.
+			clear idxSeq listLibFreq listIntraPic listOrgLib listRefLib numLibPic numIntraPic;
+			clear r2AllLibPic r2AllKeyPic r2SumAllKeyPic;
+			clear idxLibPic distQPAllQP idxQP idxDqp distAllQP qpAllQP qAllQP lambdaAllQP;
+			clear flagShow startPoint equationR_Q_quadric equationR_Q_linear equationR_lambda gof;
+		end
+
+		if subsubFlagDependentDistModel
+			
+		end
+	end
+
+	if subFlagVerifyModelR_D
+		% verify the logarithm relationship between rate and distortion.
+		% prepare data.
+		maxVar = 255;
+		if flagReadSeqListTrain
+			oriContentInfoAllSeq = oriContentInfoAllSeq_Train;
+            bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Train;
+            numAllSeq = numAllSeq_Train;
+        elseif flagReadSeqListTest
+			oriContentInfoAllSeq = oriContentInfoAllSeq_Test;
+            bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Test;
+            numAllSeq = numAllSeq_Test;
+        end
+		% collect data.
+		r2RDAllSeq = cell(numAllSeq, 2);
+		r2RDAverAllSeq = zeros(numAllSeq, 2);
+		for idxSeq = 1: numAllSeq
+			% prepare data.
+			listLibFreq = cellLibInfo{idxSeq, 3};
+			listIntraPic = cellLibInfo{idxSeq, 4};
+			listOrgLib = cellLibInfo{idxSeq, 5};
+			listRefLib = cellLibInfo{idxSeq, 6};
+			numLibPic = length(listOrgLib);
+			numIntraPic = length(listIntraPic);
+
+			% collect data. There are 3 models to test.
+			r2AllLibPic = zeros(numLibPic, 1);
+			r2AllKeyPic = zeros(numIntraPic, numDqp);
+			r2SumAllKeyPic = zeros(numIntraPic, 1);
+
+			% collect library picture data.
+			for idxLibPic = 1: numLibPic
+				% collect data.
+				DRAllQP = zeros(numQP * numDqp, 2);
+
+				for idxQP = 1: numQP
+					for idxDqp = 1: numDqp
+						DRAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(4);
+						DRAllQP((idxQP-1)*numDqp + idxDqp, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(5);
+					end
+				end
+				% remove repeat data.
+				DRAllQP = unique(DRAllQP, 'rows');
+				% convert data to proper type.
+				distAllQP = maxVar * maxVar ./ (10 .^ (DRAllQP(:, 2) ./ 10));
+				rateAllQP = DRAllQP(:, 1);
+				% fit data.
+				flagShow = 0;
+                startPointR_D = [1 1];
+				equationR_D = 'a*log(x)+b'; 
+				[ fitRes, gof ] = computeEquationFit( distAllQP, rateAllQP, equationR_D, startPointR_D, flagShow );
+				r2AllLibPic(idxLibPic) = gof.rsquare;
+			end
+
+			% collect key picture data.
+			countKeyPicPerLib = zeros(numLibPic, 1) + 1;
+			for idxKeyPic = 1: numIntraPic
+				% prepare data.
+				idxLibPic = listRefLib(idxKeyPic) + 1;
+				idxKeyPicPerLib = countKeyPicPerLib(idxLibPic);
+				% skip the key picture which reference itself.
+				if listOrgLib(listRefLib(idxKeyPic) + 1) == listIntraPic(idxKeyPic)
+					countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+                    continue;
+				end
+				% loop for each dqp.
+				for idxDqp = 1: numDqp
+					% collect data.
+					DRAllQP = zeros(numQP, 2);
+
+					for idxQP = 1: numQP
+						DRAllQP(idxQP, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 4);
+						DRAllQP(idxQP, 2) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 2}(idxKeyPicPerLib, 5);
+                    end
+					% fit data.
+					% remove repeat data.
+					DRAllQP = unique(DRAllQP, 'rows');
+					% convert data to proper type.
+					distAllQP = maxVar * maxVar ./ (10 .^ (DRAllQP(:, 2) ./ 10));
+					rateAllQP = DRAllQP(:, 1);
+					% fit data.
+					flagShow = 0;
+	                startPointR_D = [1 1];
+					equationR_D = 'a*log(x)+b'; 
+					[ fitRes, gof ] = computeEquationFit( distAllQP, rateAllQP, equationR_D, startPointR_D, flagShow );
+					r2AllKeyPic(idxKeyPic, idxDqp) = gof.rsquare;
+                    r2SumAllKeyPic(idxKeyPic) = r2SumAllKeyPic(idxKeyPic, 1) + gof.rsquare;
+				end
+				% count the number of key pictures.
+				countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+			end
+			% collect data.
+			r2RDAllSeq(idxSeq, 1) = {r2AllLibPic};
+            r2RDAllSeq(idxSeq, 2) = {r2AllKeyPic};
+			r2RDAverAllSeq(idxSeq, 1) = mean(r2AllLibPic);
+			r2RDAverAllSeq(idxSeq, 2) = sum(r2SumAllKeyPic) / numDqp / (numIntraPic - numLibPic);
+        end
+        if flagReadSeqListTrain
+            r2DQAllSeq_Train = r2RDAllSeq;
+            r2DQAverAllSeq_Train = r2RDAverAllSeq;
+        elseif flagReadSeqListTest
+            r2DQAllSeq_Test = r2RDAllSeq;
+            r2DQAverAllSeq_Test = r2RDAverAllSeq;
+        end
+	end
+
+	%% all model are verified here.
+	if subFlagVerifyModelAll
+		% prepare data.
+		% maximal value of pixel.
+		maxVar = 255;
+		numModel = 2;
+		% get basic data.
+		if flagReadSeqListTrain
+			oriContentInfoAllSeq = oriContentInfoAllSeq_Train;
+            bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Train;
+            numAllSeq = numAllSeq_Train;
+        elseif flagReadSeqListTest
+			oriContentInfoAllSeq = oriContentInfoAllSeq_Test;
+            bitPsnrLibKeyAllSeq = bitPsnrLibKeyAllSeq_Test;
+            numAllSeq = numAllSeq_Test;
+        end
+        % fitting model.
+        equationVerify = '';
+        equationIntegral = @(a,b,x) (-0.5.*exp(-a.*x).*((a.*x+1).^2+1)+1+1./(1-exp(-x)).*(-0.5*exp(-(1+a).*x)).*(((1-b).*x+1).^2+1-exp(x).*((b.*x-1).^2+1)));
+        equationDLib = @(a,b,c,x) c.*equationIntegral(a,b,x./((c/2)^0.5));
+        equationRLib = @(a,b,c,d,e,x) (-d*log(equationIntegral(a,b,x./((c/2)^0.5)))+e);
+
+		% collect data.
+		r2AllSeq = cell(numAllSeq, numModel);
+		r2AverAllSeq = zeros(numAllSeq, numModel);
+		for idxSeq = 1: numAllSeq
+			% prepare data.
+			listLibFreq = cellLibInfo{idxSeq, 3};
+			listIntraPic = cellLibInfo{idxSeq, 4};
+			listOrgLib = cellLibInfo{idxSeq, 5};
+			listRefLib = cellLibInfo{idxSeq, 6};
+			numLibPic = length(listOrgLib);
+			numIntraPic = length(listIntraPic);
+
+			% collect data. There are 3 models to test.
+			r2AllLibPic = zeros(numLibPic, numModel);
+			r2AllKeyPic = zeros(numIntraPic, numDqp, numModel);
+			r2SumAllKeyPic = zeros(numIntraPic, numModel);
+
+			% collect library picture data.
+			for idxLibPic = 1: numLibPic
+				% collect data.
+				distAllQP = zeros(numQP * numDqp, 1);
+				rateAllQP = zeros(numQP * numDqp, 1);
+				qstepAllQP = zeros(numQP * numDqp, 1);
+
+				for idxQP = 1: numQP
+					for idxDqp = 1: numDqp
+						qstepAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(3);
+						rateAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(4);
+						distAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(5);
+					end
+				end
+				% remove repeat data.
+				[qstepAllQP, idxUnique, ~] = unique(qstepAllQP, 'rows');
+				rateAllQP = rateAllQP(idxUnique);
+				distAllQP = distAllQP(idxUnique);
+				% convert data to proper type.
+				distAllQP = maxVar * maxVar ./ (10 .^ (distAllQP ./ 10));
+                qstepAllQP = 2 .^ ((qstepAllQP - 4) / 6); % convert QP to Q.
+				% fit data.
+				flagShow = 1;
+                startPointDEqu = [1 1 1];
+				equationDEqu = equationDLib; 
+				[ fitRes, gof ] = computeEquationFit( qstepAllQP, distAllQP, equationDEqu, startPointDEqu, flagShow );
+				r2AllLibPic(idxLibPic, 1) = gof.rsquare;
+
+				startPointREqu = [fitRes.a fitRes.b fitRes.c 1 1];
+				equationREqu = equationRLib;
+				[ fitRes, gof ] = computeEquationFit( qstepAllQP, rateAllQP, equationREqu, startPointREqu, flagShow );
+				r2AllLibPic(idxLibPic, 2) = gof.rsquare;
+			end
+
+			% collect key picture data.
+			countKeyPicPerLib = zeros(numLibPic, 1) + 1;
+			for idxKeyPic = 1: numIntraPic
+				% prepare data.
+				idxLibPic = listRefLib(idxKeyPic) + 1;
+				idxKeyPicPerLib = countKeyPicPerLib(idxLibPic);
+				% skip the key picture which reference itself.
+				if listOrgLib(listRefLib(idxKeyPic) + 1) == listIntraPic(idxKeyPic)
+					countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+                    continue;
+				end
+				% loop for each dqp.
+				for idxDqp = 1: numDqp
+					% collect data.
+					distAllQP = zeros(numQP * numDqp, 1);
+					rateAllQP = zeros(numQP * numDqp, 1);
+					qstepAllQP = zeros(numQP * numDqp, 1);
+
+					for idxQP = 1: numQP
+                        qstepAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(3);
+                        rateAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(4);
+                        distAllQP((idxQP-1)*numDqp + idxDqp, 1) = bitPsnrLibKeyAllSeq{idxSeq}{idxQP}{idxDqp}{idxLibPic, 1}(5);
+					end
+					% remove repeat data.
+					[qstepAllQP, idxUnique, ~] = unique(qstepAllQP, 'rows');
+					rateAllQP = rateAllQP(idxUnique);
+					distAllQP = distAllQP(idxUnique);
+					% convert data to proper type.
+					distAllQP = maxVar * maxVar ./ (10 .^ (distAllQP ./ 10));
+                    qstepAllQP = 2 .^ ((qstepAllQP - 4) / 6); % convert QP to Q.
+					% fit data.
+					flagShow = 0;
+		            startPointDEqu = [1 1 1];
+					equationDEqu = equationDLib; 
+					[ fitRes, gof ] = computeEquationFit( qstepAllQP, distAllQP, equationDEqu, startPointDEqu, flagShow );
+					r2AllKeyPic(idxKeyPic, idxDqp, 1) = gof.rsquare;
+                    r2SumAllKeyPic(idxKeyPic, 1) = r2SumAllKeyPic(idxKeyPic, 1) + gof.rsquare;
+
+					startPointREqu = [1 1 1 1 1];
+					equationREqu = equationRLib;
+					[ fitRes, gof ] = computeEquationFit( qstepAllQP, rateAllQP, equationREqu, startPointREqu, flagShow );
+					r2AllKeyPic(idxKeyPic, idxDqp, 2) = gof.rsquare;
+                    r2SumAllKeyPic(idxKeyPic, 2) = r2SumAllKeyPic(idxKeyPic, 2) + gof.rsquare;
+				end
+				% count the number of key pictures.
+				countKeyPicPerLib(idxLibPic) = countKeyPicPerLib(idxLibPic) + 1;
+			end
+			% collect data.
+			r2AllSeq(idxSeq, 1) = {r2AllLibPic};
+            r2AllSeq(idxSeq, 2) = {r2AllKeyPic};
+			r2AverAllSeq(idxSeq, 1) = mean(r2AllLibPic);
+			r2AverAllSeq(idxSeq, 2) = sum(r2SumAllKeyPic) / numDqp / (numIntraPic - numLibPic);
+        end
+        if flagReadSeqListTrain
+            r2DQAllSeq_Train = r2AllSeq;
+            r2DQAverAllSeq_Train = r2AverAllSeq;
+        elseif flagReadSeqListTest
+            r2DQAllSeq_Test = r2AllSeq;
+            r2DQAverAllSeq_Test = r2AverAllSeq;
+        end
+	end
+
 end

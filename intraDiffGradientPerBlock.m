@@ -5,7 +5,7 @@ function [ err ] = intraDiffGradientPerBlock( trgPic, idxBlockInWidth, idxBlockI
 %   --idxBlockInWidth: indicate the width idx of block in picture.
 %   --idxBlockInHeight: indicate the height idx of block in picture.
 %	--blockSize: size of block.
-%   --err: the difference between two pictures after motion compensation.
+%   --err: the difference in intra mode.
 
 %% prepare corrdinates of block samples.
 startTrgPosW = blockSize * (idxBlockInWidth - 1) + 1;
