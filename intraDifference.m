@@ -27,7 +27,7 @@ for idxBlockInWidth = 1: numBlockInWidth
         intervalTrgHeight = startTrgPosH: endTrgPosH;
         trgBlock = fetchBlock(trgPic, intervalTrgWidth, intervalTrgHeight);
         
-       %% compute the minimal difference.
+        %% compute the minimal difference.
         % errMin = intraDifferencePerBlock( trgPic, trgBlock, idxBlockInWidth, idxBlockInHeight );
         errMin = intraDiffGradientPerBlock( trgPic, idxBlockInWidth, idxBlockInHeight, blockSize );
 

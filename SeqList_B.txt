@@ -1,0 +1,5 @@
+BasketballDrive_1920x1080_50	48	500	\FinalCfPVersionSequence\B
+BQTerrace_1920x1080_60		64	600	\FinalCfPVersionSequence\B
+Cactus_1920x1080_50		48	500	\FinalCfPVersionSequence\B
+Kimono_1920x1080_24		32	240	\FinalCfPVersionSequence\B
+ParkScene_1920x1080_24		32	240	\FinalCfPVersionSequence\B

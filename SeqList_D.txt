@@ -1,0 +1,4 @@
+BasketballPass_416x240_50	48	500	\FinalCfPVersionSequence\D
+BlowingBubbles_416x240_50	48	500	\FinalCfPVersionSequence\D
+BQSquare_416x240_60		64	600	\FinalCfPVersionSequence\D
+RaceHorses_416x240_30		32	300	\FinalCfPVersionSequence\D

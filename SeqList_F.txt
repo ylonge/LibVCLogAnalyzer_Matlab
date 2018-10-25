@@ -1,0 +1,4 @@
+BasketballDrillText_832x480_50	48	500	\FinalCfPVersionSequence\F
+ChinaSpeed_1024x768_30	32	500	\FinalCfPVersionSequence\F
+SlideEditing_1280x720_30	32	300	\FinalCfPVersionSequence\F
+SlideShow_1280x720_20	16	500	\FinalCfPVersionSequence\F

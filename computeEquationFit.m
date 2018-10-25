@@ -1,9 +1,10 @@
-function [ fitresult, gof ] = computeEquationFit( x, y, equation, startPoint, flagShow )
+function [ fitresult, gof ] = computeEquationFit( x, y, equation, opts, flagShow )
 %Author: ylonge.
 %Function: compute fit parameter and show curve with given equation. Only one independent factor is considered.
 %-Input:
 %   --x,y: independent and dependent data.
 %	--equation: string that describes the fit equation.
+%   --opt: the option of equation.
 %-OutPut:
 %	--fitresult: the parameters of the equation.
 %	--gof: performance evaluation of the fit.
@@ -13,9 +14,7 @@ function [ fitresult, gof ] = computeEquationFit( x, y, equation, startPoint, fl
 
 % Set up fittype and options.
 ft = fittype( equation, 'independent', 'x', 'dependent', 'y' );
-opts = fitoptions( 'Method', 'NonlinearLeastSquares' );
 opts.Display = 'Off';
-opts.StartPoint = startPoint;
 
 % Fit model to data.
 [fitresult, gof] = fit( xData, yData, ft, opts );

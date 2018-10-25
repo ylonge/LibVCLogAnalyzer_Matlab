@@ -1,4 +1,4 @@
-function [ y,u,v ] = readYuv( dirFile, poc, width, height )
+function [ y,u,v ] = readYuv( dirFile, poc, width, height, bits )
 %Author: ylonge.
 %Function: Read picture yuv from yuv file.
 %   --dirLogFile: directory of yuv file.
@@ -33,19 +33,44 @@ if nargin <= 1
     err('poc is not given!\n');
 end
 
-skip = poc * height * width * 1.5;
-fseek(fidFile, skip, 'bof');
+if bits <= 8
+    skip = poc * height * width * 1.5;
+    fseek(fidFile, skip, 'bof');
 
-lengthY = height * width;
-line = fread(fidFile, lengthY);
-y = reshape(line, width, height);
+    lengthY = height * width;
+    line = fread(fidFile, lengthY);
+    y = reshape(line, width, height);
 
-lengthUV = height * width / 4;
-line = fread(fidFile, lengthUV);
-u = reshape(line, width/2, height/2);
+    lengthUV = height * width / 4;
+    line = fread(fidFile, lengthUV);
+    u = reshape(line, width/2, height/2);
 
-line = fread(fidFile, lengthUV);
-v = reshape(line, width/2, height/2);
+    line = fread(fidFile, lengthUV);
+    v = reshape(line, width/2, height/2);
+elseif bits > 8
+    skip = poc * height * width * 1.5 * 2;
+    fseek(fidFile, skip, 'bof');
+
+    lengthY = height * width * 2;
+    line = fread(fidFile, lengthY);
+    lineLow = line(1:2:end);
+    lineHigh = line(2:2:end);
+    lineComb = lineHigh * 256 + lineLow;
+    y = reshape(lineComb, width, height);
+
+    lengthUV = lengthY / 4;
+    line = fread(fidFile, lengthUV);
+    lineLow = line(1:2:end);
+    lineHigh = line(2:2:end);
+    lineComb = lineHigh * 256 + lineLow;
+    u = reshape(lineComb, width/2, height/2);
+
+    line = fread(fidFile, lengthUV);
+    lineLow = line(1:2:end);
+    lineHigh = line(2:2:end);
+    lineComb = lineHigh * 256 + lineLow;
+    v = reshape(lineComb, width/2, height/2);
+end
 
 
 fclose(fidFile);

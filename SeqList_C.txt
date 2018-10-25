@@ -1,0 +1,4 @@
+BasketballDrill_832x480_50	48	500	\FinalCfPVersionSequence\C
+BQMall_832x480_60		64	600	\FinalCfPVersionSequence\C
+PartyScene_832x480_50		48	500	\FinalCfPVersionSequence\C
+RaceHorses_832x480_30		32	300	\FinalCfPVersionSequence\C

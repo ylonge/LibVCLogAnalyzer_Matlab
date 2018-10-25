@@ -1,0 +1,4 @@
+PeopleOnStreet_2560x1600_30_crop	32	150	\FinalCfPVersionSequence\A
+Traffic_2560x1600_30_crop	32	150	\FinalCfPVersionSequence\A
+NebutaFestival_2560x1600_60_10bit_crop	64	300	\FinalCfPVersionSequence\A
+SteamLocomotiveTrain_2560x1600_60_10bit_crop	64	300	\FinalCfPVersionSequence\A

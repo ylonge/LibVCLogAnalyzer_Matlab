@@ -1,4 +1,4 @@
-function [ errInterAver, errInterTotal, errIntraAver, errIntraTotal, percentIntra, mvCell, errMat ] = motionCompensation( refPic, trgPic, blockSize, searchRange )
+function [ errInterAver, errInterTotal, errIntraAver, errIntraTotal, percentIntra, mvCell, errMatInter, errMatIntra ] = motionCompensation( refPic, trgPic, blockSize, searchRange )
 %Author: ylonge.
 %Function: This function is used to process motion compensation and compute the error.
 %   --refPic: sample of reference picture. only luma is used in common situation.
@@ -21,7 +21,8 @@ numBlockInHeight = ceil(height / blockSize);
 errInterTotal = 0;
 errIntraTotal = 0;
 mvCell = cell(numBlockInWidth, numBlockInHeight);
-errMat = zeros(numBlockInWidth, numBlockInHeight);
+errMatInter = zeros(numBlockInWidth, numBlockInHeight);
+errMatIntra = zeros(numBlockInWidth, numBlockInHeight);
 countIntraBlock = 0;
 
 for idxBlockInWidth = 1: numBlockInWidth
@@ -45,17 +46,17 @@ for idxBlockInWidth = 1: numBlockInWidth
         if errIntra < errInter
         	countIntraBlock = countIntraBlock + 1;
         	errIntraTotal = errIntraTotal + errIntra;
-        	errMat(idxBlockInWidth, idxBlockInHeight) = errIntra;
+        	errMatIntra(idxBlockInWidth, idxBlockInHeight) = errIntra;
         else
         	errInterTotal = errInterTotal + errInter;
         	mvCell(idxBlockInWidth, idxBlockInHeight) = {mv};
-        	errMat(idxBlockInWidth, idxBlockInHeight) = errInter;
+        	errMatInter(idxBlockInWidth, idxBlockInHeight) = errInter;
         end
     end
 end
 
 errInterAver = errInterTotal / (numBlockInWidth * numBlockInHeight - countIntraBlock) / blockSize / blockSize;
-if countIntraBlock >= 0
+if countIntraBlock > 0
 	errIntraAver = errIntraTotal / countIntraBlock / blockSize / blockSize;
 end
 
